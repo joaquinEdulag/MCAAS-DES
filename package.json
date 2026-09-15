@@ -1,0 +1,46 @@
+{
+  "name": "mcaas-des",
+  "version": "1.0.0",
+  "description": "Middle - Connector as a Service - Database Extractor n Sender",
+  "private": true,
+  "main": "build/index.js",
+  "bin": "build/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts --service",
+    "run:once": "tsx src/index.ts --run-once",
+    "validate": "tsx src/index.ts --validate-config",
+    "check:connections": "tsx src/index.ts --check-connections",
+    "monitor": "tsx src/index.ts --monitor",
+    "clear:error": "tsx src/index.ts --clear-persistent-error",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "bundle": "ncc build src/index.ts -o build --minify",
+    "build:win": "npm run typecheck && npm run test && npm run bundle && node scripts/build-windows.mjs",
+    "package:zip": "node scripts/package-project.mjs",
+    "package:release": "node scripts/package-release.mjs",
+    "installer:win": "node scripts/build-installer.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "googleapis": "^180.0.0",
+    "mssql": "^12.7.2",
+    "mysql2": "^3.24.4",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "@types/pg": "^8.15.5",
+    "@vercel/ncc": "^0.45.0",
+    "@yao-pkg/pkg": "^6.22.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0",
+    "archiver": "^7.0.1",
+    "@types/archiver": "^6.0.3",
+    "resedit-cli": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

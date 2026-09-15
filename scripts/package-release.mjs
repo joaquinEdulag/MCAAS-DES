@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import archiver from 'archiver';
+const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const release = path.join(root, 'dist', 'windows', 'MCAAS-DES-Windows-x64');
+if (!fs.existsSync(path.join(release, 'mcaas-des.exe'))) throw new Error('Primero ejecute npm run build:win.');
+const outPath = path.join(root, 'dist', 'windows', 'MCAAS-DES-Windows-x64.zip');
+const output = fs.createWriteStream(outPath);
+const archive = archiver('zip', { zlib: { level: 9 } });
+archive.pipe(output); archive.directory(release, 'MCAAS-DES-Windows-x64');
+await archive.finalize();
+await new Promise((resolve, reject) => { output.on('close', resolve); output.on('error', reject); });
+console.log(outPath);
