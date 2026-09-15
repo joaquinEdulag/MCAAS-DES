@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-import fs from 'node:fs';
-import path from 'node:path';
 import { loadConfig, safeConfigSummary, validateConfig } from './config.js';
 import { Logger } from './logger.js';
 import { FailureTracker } from './failure-tracker.js';
@@ -9,12 +7,12 @@ import { runMonitor } from './monitor.js';
 import { parseExtractionScript } from './sql-script.js';
 import { sanitizeError, sleep } from './utils.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 function has(arg: string): boolean { return process.argv.includes(arg); }
 
 function help(): void {
-  console.log(`MCAAS - DES v${VERSION}\n\nComandos:\n  --service                  Ejecuta el motor 24/7.\n  --run-once                 Ejecuta una sola extracción/sincronización.\n  --validate-config          Valida .env y el script SQL sin conectarse.\n  --check-connections        Prueba origen y todos los destinos.\n  --status                   Muestra estado local sin exponer datos.\n  --monitor                  Abre el monitor de logs.\n  --clear-persistent-error   Libera la pausa por error persistente.\n  --config <ruta>            Usa un archivo .env específico.\n  --version                  Muestra versión.\n  --help                     Muestra esta ayuda.`);
+  console.log(`MCAAS - DES v${VERSION}\n\nComandos:\n  --service                  Ejecuta el motor 24/7.\n  --run-once                 Ejecuta un ciclo de todas las extracciones.\n  --validate-config          Valida .env y todos los scripts SQL sin conectarse.\n  --check-connections        Prueba todos los orígenes y todos los destinos.\n  --status                   Muestra estado local sin exponer datos.\n  --monitor                  Abre el monitor de logs.\n  --clear-persistent-error   Libera la pausa por error persistente.\n  --config <ruta>            Usa un archivo .env específico.\n  --version                  Muestra versión.\n  --help                     Muestra esta ayuda.`);
 }
 
 async function main(): Promise<void> {
@@ -27,10 +25,20 @@ async function main(): Promise<void> {
   const failures = new FailureTracker(config.stateDir, config.failureThreshold, config.failureWindowHours);
 
   if (has('--validate-config')) {
-    const metadata = parseExtractionScript(config.extractionScriptPath, config.fallbackTargetTable, config.fallbackKeyColumns);
-    console.log(JSON.stringify({ ok: true, config: safeConfigSummary(config), script: { name: metadata.name, targetTable: metadata.targetTable, keyColumns: metadata.keyColumns } }, null, 2));
+    const scripts = config.extractions.map((extraction) => {
+      const metadata = parseExtractionScript(extraction.scriptPath, extraction.fallbackTargetTable, extraction.fallbackKeyColumns);
+      return {
+        id: extraction.id,
+        name: extraction.name || metadata.name,
+        scriptPath: extraction.scriptPath,
+        targetTable: metadata.targetTable,
+        keyColumns: metadata.keyColumns,
+      };
+    });
+    console.log(JSON.stringify({ ok: true, config: safeConfigSummary(config), scripts }, null, 2));
     return;
   }
+
   if (has('--clear-persistent-error')) {
     failures.clear();
     logger.success('Error persistente liberado manualmente. El servicio podrá reanudar actividades en su siguiente verificación.');
@@ -50,13 +58,16 @@ async function main(): Promise<void> {
   }
   if (has('--run-once')) {
     try {
-      logger.info(`Extracción iniciada. Script: ${path.basename(config.extractionScriptPath)}.`);
+      logger.info(`Ciclo manual iniciado. Extracciones configuradas: ${config.extractions.length}; destinos: ${config.destinations.length}.`);
       await engine.runCycle(true);
     } finally { await engine.disconnectAll(); }
     return;
   }
 
-  logger.info(`${config.appName} iniciado en modo 24/7. Origen: ${config.source.type}; destinos: ${config.destinations.length}.`);
+  logger.info(
+    `${config.appName} iniciado en modo 24/7. Extracciones: ${config.extractions.length}; ` +
+    `destinos: ${config.destinations.length}; campo de origen: ${config.originFieldName || 'deshabilitado (legacy)'}.`,
+  );
   let persistentNoticeShown = false;
   let running = true;
   const stop = () => { running = false; };

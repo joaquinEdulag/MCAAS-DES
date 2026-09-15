@@ -56,9 +56,9 @@
   <h1>MCAAS - DES</h1>
   <div class="subtitle">Database Extractor n Sender<br>Manual de usuario, configuración, pruebas, build e instalación</div>
   <div class="meta">
-    Versión del proyecto: 1.0.0<br>
+    Versión del proyecto: 1.1.0<br>
     Plataforma objetivo: Windows x64<br>
-    Fecha del manual: 14 de septiembre de 2026
+    Fecha del manual: 15 de septiembre de 2026
   </div>
 </section>
 
@@ -92,43 +92,46 @@
 
 <section id="objetivo">
 <h2>1. Objetivo y alcance</h2>
-<p>MCAAS - DES unifica dos responsabilidades: extracción y envío. Su propósito es ejecutar una consulta SQL configurable contra una base de datos origen, convertir el resultado en operaciones de escritura seguras y replicarlas hacia una o varias bases de datos externas.</p>
-<p>El sistema no está acoplado a CONTPAQi. CONTPAQi es un caso de uso natural porque normalmente expone información en SQL Server, pero el origen puede ser SQL Server, PostgreSQL o MySQL siempre que se proporcionen credenciales válidas y conectividad de red.</p>
+<p>MCAAS - DES unifica extracción, detección de cambios y envío. Desde la versión 1.1.0 una sola instalación puede ejecutar <b>varios trabajos de extracción</b>, cada uno con su propia base origen, script SQL, nombre lógico y tabla destino.</p>
+<p>Esto permite, por ejemplo, leer empleados desde varias empresas o sucursales de CONTPAQi, o combinar consultas de SQL Server, PostgreSQL y MySQL dentro del mismo servicio. Todos los cambios detectados se intentan reenviar a todos los destinos configurados.</p>
 <div class="kpi-grid">
+  <div class="kpi"><b>N</b>extracciones configurables</div>
   <div class="kpi"><b>1-10</b>destinos por instalación</div>
-  <div class="kpi"><b>300 ms</b>pausa por defecto entre destinos</div>
   <div class="kpi"><b>24/7</b>operación prevista</div>
 </div>
-<p>La sincronización es cercana a tiempo real mediante polling. Por defecto se espera 2 segundos entre ciclos completos, pero el valor es configurable en <code>POLL_INTERVAL_MS</code>.</p>
+<p>Para distinguir datos con claves de negocio repetidas, MCAAS agrega automáticamente un campo de procedencia definido por <code>ORIGIN_FIELD_NAME</code>. Su valor es el <code>EXTRACT_N_NAME</code> del trabajo que produjo la fila.</p>
+<div class="callout"><b>Ejemplo:</b> <code>empleado_id=25</code> de <code>Empleados_Matriz</code> y <code>empleado_id=25</code> de <code>Empleados_Sucursal_Norte</code> son entidades distintas porque la identidad funcional incluye también el origen.</div>
 </section>
 
 <section id="arquitectura" class="page-break">
 <h2>2. Arquitectura y flujo</h2>
 <div class="diagram">
-BASE ORIGEN<br>
-SQL Server / PostgreSQL / MySQL<br>
-&nbsp;&nbsp;|<br>
-&nbsp;&nbsp;| EXTRACTION_SCRIPT<br>
-&nbsp;&nbsp;v<br>
-SELECT -> Validación -> Hash de clave + Hash de fila -> Estado local por destino<br>
-&nbsp;&nbsp;|<br>
-&nbsp;&nbsp;+--> Destino 1 -> INSERT/UPDATE -> espera 300 ms<br>
-&nbsp;&nbsp;+--> Destino 2 -> INSERT/UPDATE -> espera 300 ms<br>
-&nbsp;&nbsp;+--> Destino 3 -> INSERT/UPDATE -> espera 300 ms<br>
-&nbsp;&nbsp;+--> ... hasta Destino 10
+EXTRACT_1 -&gt; BD / SQL A --+<br>
+EXTRACT_2 -&gt; BD / SQL B --+--&gt; SELECT -&gt; validación -&gt; agrega origen -&gt; hash/estado<br>
+EXTRACT_3 -&gt; BD / SQL C --+                         |<br>
+...                                                  +--&gt; Destino 1 -&gt; espera 300 ms<br>
+                                                     +--&gt; Destino 2 -&gt; espera 300 ms<br>
+                                                     +--&gt; ... hasta Destino 10
 </div>
+<h3>Identidad funcional</h3>
+<div class="diagram">
+PK destino autoincremental: id = 1841 (administrada por la BD)<br><br>
+Identidad MCAAS: source_name = "Empleados_Matriz" + empleado_id = 25<br>
+Identidad MCAAS: source_name = "Empleados_Sucursal_Norte" + empleado_id = 25
+</div>
+<p>La PK autoincremental del destino no se utiliza para localizar la fila a sincronizar. En modo normal, el <code>UPDATE</code> y la comprobación previa al <code>INSERT</code> usan la combinación <b>origen + columnas clave del script</b>.</p>
 <h3>Componentes</h3>
 <table>
 <thead><tr><th>Componente</th><th>Responsabilidad</th></tr></thead>
 <tbody>
-<tr><td>Extractor</td><td>Ejecuta el SQL de lectura y obtiene columnas y filas sin requerir recompilación.</td></tr>
-<tr><td>Detector de cambios</td><td>Genera huellas SHA-256 a partir de las columnas clave y del contenido completo de cada fila.</td></tr>
-<tr><td>Estado local</td><td>Guarda, por destino, la última huella enviada. Evita que un fallo en un destino marque como enviado a los demás.</td></tr>
-<tr><td>Sender</td><td>Construye operaciones parametrizadas para cada motor destino.</td></tr>
+<tr><td>Extraction jobs</td><td>Unidades <code>EXTRACT_N</code>. Cada una encapsula nombre lógico, conexión origen y script SQL.</td></tr>
+<tr><td>Extractor</td><td>Ejecuta cada SQL de lectura y obtiene columnas/filas sin requerir recompilación.</td></tr>
+<tr><td>Origin tagger</td><td>Agrega a cada fila la columna configurada por <code>ORIGIN_FIELD_NAME</code> con valor <code>EXTRACT_N_NAME</code>.</td></tr>
+<tr><td>Detector de cambios</td><td>Genera huellas SHA-256 de la identidad y del contenido completo de la fila.</td></tr>
+<tr><td>Estado local</td><td>Guarda, por stream y destino, la última huella enviada. Un fallo en un destino no marca como enviado a los demás.</td></tr>
+<tr><td>Sender</td><td>Construye operaciones parametrizadas para SQL Server, PostgreSQL o MySQL.</td></tr>
 <tr><td>Failure tracker</td><td>Cuenta fallos dentro de una ventana de tiempo y activa la pausa persistente.</td></tr>
-<tr><td>Logger</td><td>Genera logs diarios de operación, errores y banderas de datos.</td></tr>
-<tr><td>Monitor</td><td>Muestra los logs en una consola legible, separada del núcleo 24/7.</td></tr>
-<tr><td>Task Scheduler</td><td>Arranca el núcleo al iniciar Windows y lo reinicia si el proceso termina inesperadamente.</td></tr>
+<tr><td>Monitor / Task Scheduler</td><td>Mantiene operación 24/7 y una consola de lectura desacoplada del núcleo.</td></tr>
 </tbody>
 </table>
 </section>
@@ -136,48 +139,50 @@ SELECT -> Validación -> Hash de clave + Hash de fila -> Estado local por destin
 <section id="soporte">
 <h2>3. Funciones soportadas</h2>
 <ul>
-<li>Extracción dinámica mediante un archivo <code>.sql</code>.</li>
-<li>Origen SQL Server, PostgreSQL o MySQL.</li>
+<li>Múltiples extracciones <code>EXTRACT_1</code>, <code>EXTRACT_2</code>, ... definidas en <code>.env</code>.</li>
+<li>Cada extracción puede usar una BD distinta o compartir BD con otras consultas.</li>
+<li>SQL Server, PostgreSQL y MySQL como origen o destino.</li>
+<li>Nombre lógico único por extracción, persistido automáticamente en cada fila destino.</li>
+<li>Identidad por <code>origen + MCAAS_KEY_COLUMNS</code>.</li>
+<li>PK autoincremental propia en destino, protegida por <code>DESTINATION_AUTO_ID_COLUMN</code>.</li>
+<li>Scripts SQL reemplazables sin recompilar.</li>
 <li>Entre 1 y 10 destinos, cada uno con credenciales y política histórica independientes.</li>
-<li>Conexión por URL o por host, puerto, base, usuario y contraseña.</li>
-<li>TLS/SSL y certificado CA opcional para PostgreSQL/MySQL.</li>
-<li>Tabla destino definida en el script, con sobrescritura opcional por destino.</li>
-<li>Detección de filas nuevas y filas modificadas.</li>
-<li>Modo normal: UPDATE por clave; si no existe, INSERT.</li>
-<li>Modo histórico: INSERT de una nueva versión cada vez que cambia una fila.</li>
-<li>Batches transaccionales configurables.</li>
-<li>Logs sin almacenar el contenido de las filas en el archivo de banderas.</li>
-<li>Alertas por Gmail API con OAuth 2.0.</li>
-<li>Comandos de diagnóstico sin levantar el servicio permanentemente.</li>
-<li>Build Windows autocontenido para PC sin Node.js.</li>
+<li>Modo normal: UPDATE por identidad funcional; si no existe, INSERT.</li>
+<li>Modo <code>HISTORICO=true</code>: cada versión nueva/modificada se inserta como nueva fila.</li>
+<li>Pausa configurable de 300 ms entre intento de un destino y el siguiente.</li>
+<li>Estado independiente por extracción y destino.</li>
+<li>Logs operativos, errores y banderas sin guardar los valores de las filas.</li>
+<li>Detección de error persistente y alerta por Gmail API.</li>
+<li>Build Windows autocontenido para servidores sin Node.js.</li>
 </ul>
-<div class="callout warning"><b>No crea tablas automáticamente.</b> Las tablas de destino deben existir antes del lanzamiento y sus columnas deben ser compatibles con el resultado del SELECT.</div>
+<div class="callout warning"><b>No crea tablas automáticamente.</b> Las tablas destino deben existir y ser compatibles con las columnas de cada SELECT, más la columna de procedencia.</div>
 </section>
 
 <section id="requisitos" class="page-break">
 <h2>4. Requisitos pre-lanzamiento</h2>
-<h3>4.1 Base origen</h3>
+<h3>4.1 Bases origen</h3>
 <ul class="checklist">
-<li>Servidor accesible desde la PC donde correrá MCAAS - DES.</li>
-<li>TCP/IP habilitado cuando el motor lo requiera. En SQL Server esto suele ser relevante.</li>
-<li>Usuario dedicado de solo lectura.</li>
-<li>Permiso SELECT sobre todas las tablas/vistas usadas por el script.</li>
-<li>Una combinación de columnas estable y no nula para usar como <code>MCAAS_KEY_COLUMNS</code>.</li>
+<li>Cada servidor origen es accesible desde la PC donde correrá MCAAS - DES.</li>
+<li>Existe un usuario dedicado de solo lectura para cada origen.</li>
+<li>El usuario tiene permiso SELECT sobre las tablas/vistas usadas por su script.</li>
+<li>Cada extracción dispone de una combinación de columnas estable y no nula para <code>MCAAS_KEY_COLUMNS</code>.</li>
+<li>Cada <code>EXTRACT_N_NAME</code> es único y estable.</li>
 </ul>
 <h3>4.2 Bases destino</h3>
 <ul class="checklist">
-<li>Tabla destino creada.</li>
-<li>Columnas compatibles por nombre y tipo con el SELECT.</li>
-<li>Usuario con permisos INSERT y UPDATE en destinos normales.</li>
-<li>Usuario con permiso INSERT en destinos históricos.</li>
-<li>Reglas de firewall y puertos abiertos desde el servidor MCAAS.</li>
-<li>TLS/CA configurado si el proveedor, como Aiven, lo exige.</li>
+<li>La tabla destino ya existe.</li>
+<li>Contiene todas las columnas devueltas por el SELECT y la columna indicada en <code>ORIGIN_FIELD_NAME</code>.</li>
+<li>La PK autoincremental del destino no comparte nombre con una columna que MCAAS deba insertar.</li>
+<li>El usuario tiene INSERT y UPDATE en destinos normales; INSERT en históricos.</li>
+<li>Firewall, puertos y TLS permiten acceso desde el servidor MCAAS.</li>
 </ul>
-<h3>4.3 Máquina de compilación</h3>
-<p>Solo la máquina que compila necesita Node.js y npm. Se recomienda Node 22 o superior para el pipeline incluido. El servidor que recibe el build no necesita Node.js.</p>
-<h3>4.4 Servidor de operación</h3>
-<p>Windows x64, permisos de Administrador durante la instalación, conectividad a todas las bases y espacio para logs/estado. La aplicación se registra mediante Task Scheduler.</p>
-<div class="callout success"><b>Para un servidor de renta con CONTPAQi:</b> no se requiere instalar herramientas de desarrollo. Compile en otra PC, copie la carpeta de release y ejecute el instalador PowerShell como Administrador.</div>
+<h3>4.3 Recomendación de índice</h3>
+<p>En destinos normales se recomienda una restricción o índice único sobre la identidad funcional. Ejemplo PostgreSQL:</p>
+<pre>CREATE UNIQUE INDEX ux_empleados_origen
+ON empleados (source_name, empleado_id);</pre>
+<p>En destinos históricos use un índice normal, no UNIQUE, porque deben convivir varias versiones de la misma entidad.</p>
+<h3>4.4 Máquina de compilación y servidor</h3>
+<p>Solo la máquina que compila necesita Node.js y npm. El servidor Windows que recibe el ejecutable autocontenido no necesita Node.js. Durante la instalación se requieren permisos de Administrador para registrar las tareas programadas.</p>
 </section>
 
 <section id="estructura">
@@ -198,110 +203,141 @@ SELECT -> Validación -> Hash de clave + Hash de fila -> Estado local por destin
 
 <section id="env" class="page-break">
 <h2>6. Configuración del .env</h2>
-<p>El archivo entregado <code>.env.example</code> documenta todas las variables. En una instalación Windows, el archivo real se encuentra por defecto en:</p>
-<pre>C:\ProgramData\MCAAS-DES\.env</pre>
-<h3>6.1 Origen</h3>
+<p>En Windows, la configuración real queda por defecto en <code>C:\ProgramData\MCAAS-DES\.env</code>.</p>
+<h3>6.1 Múltiples extracciones</h3>
 <table>
 <thead><tr><th>Variable</th><th>Descripción</th><th>Ejemplo</th></tr></thead>
 <tbody>
-<tr><td>SOURCE_DB_TYPE</td><td><code>mssql</code>, <code>postgres</code> o <code>mysql</code>.</td><td>mssql</td></tr>
-<tr><td>SOURCE_DB_URL</td><td>Cadena URL opcional. Si se usa, sustituye host/usuario/etc.</td><td>vacío</td></tr>
-<tr><td>SOURCE_DB_HOST</td><td>Host o IP.</td><td>127.0.0.1</td></tr>
-<tr><td>SOURCE_DB_PORT</td><td>Puerto del motor.</td><td>1433</td></tr>
-<tr><td>SOURCE_DB_NAME</td><td>Base a consultar.</td><td>MiEmpresa</td></tr>
-<tr><td>SOURCE_DB_USER</td><td>Usuario, preferentemente de lectura.</td><td>mcaas_reader</td></tr>
-<tr><td>SOURCE_DB_PASSWORD</td><td>Contraseña. Nunca debe subirse al repositorio.</td><td>***</td></tr>
-<tr><td>SOURCE_DB_SSL</td><td>Activa TLS para motores que usan esta bandera.</td><td>false</td></tr>
-<tr><td>SOURCE_DB_SSL_CA_PATH</td><td>CA opcional, relativa al .env o absoluta.</td><td>./certs/ca.pem</td></tr>
-<tr><td>SOURCE_DB_ENCRYPT</td><td>Opción relevante para SQL Server.</td><td>false</td></tr>
-<tr><td>SOURCE_DB_TRUST_SERVER_CERTIFICATE</td><td>Permite certificado no verificado en SQL Server. Úselo solo si corresponde.</td><td>true</td></tr>
+<tr><td>EXTRACTION_COUNT</td><td>Cantidad de trabajos de extracción definidos.</td><td>2</td></tr>
+<tr><td>ORIGIN_FIELD_NAME</td><td>Nombre de la columna agregada por MCAAS a cada fila destino.</td><td>source_name</td></tr>
+<tr><td>DESTINATION_AUTO_ID_COLUMN</td><td>PK autoincremental reservada del destino. MCAAS no la escribe.</td><td>id</td></tr>
+<tr><td>EXTRACT_N_NAME</td><td>Nombre lógico único. Este valor se almacena en <code>ORIGIN_FIELD_NAME</code>.</td><td>Empleados_Matriz</td></tr>
+<tr><td>EXTRACT_N_SCRIPT</td><td>Ruta al SQL de esa extracción.</td><td>./scripts/extraction-empleados.sql</td></tr>
+<tr><td>EXTRACT_N_DB_TYPE</td><td><code>mssql</code>, <code>postgres</code> o <code>mysql</code>.</td><td>mssql</td></tr>
+<tr><td>EXTRACT_N_DB_URL</td><td>URL opcional de conexión.</td><td>vacío</td></tr>
+<tr><td>EXTRACT_N_DB_HOST / PORT / NAME / USER / PASSWORD</td><td>Credenciales separadas si no usa URL.</td><td>127.0.0.1 / 1433 / CONTPAQ</td></tr>
+<tr><td>EXTRACT_N_TARGET_TABLE</td><td>Fallback opcional si el SQL no define <code>MCAAS_TARGET_TABLE</code>.</td><td>empleados</td></tr>
+<tr><td>EXTRACT_N_SYNC_KEY_COLUMNS</td><td>Fallback opcional si el SQL no define <code>MCAAS_KEY_COLUMNS</code>.</td><td>empleado_id</td></tr>
 </tbody>
 </table>
-<h3>6.2 Extracción y sincronización</h3>
+<pre>EXTRACTION_COUNT=2
+ORIGIN_FIELD_NAME=source_name
+DESTINATION_AUTO_ID_COLUMN=id
+
+EXTRACT_1_NAME=Empleados_Matriz
+EXTRACT_1_SCRIPT=./scripts/extraction-empleados.sql
+EXTRACT_1_DB_TYPE=mssql
+EXTRACT_1_DB_HOST=127.0.0.1
+EXTRACT_1_DB_NAME=CONTPAQ_MATRIZ
+EXTRACT_1_DB_USER=reader
+EXTRACT_1_DB_PASSWORD=***
+
+EXTRACT_2_NAME=Empleados_Sucursal_Norte
+EXTRACT_2_SCRIPT=./scripts/extraction-empleados-sucursal.sql
+EXTRACT_2_DB_TYPE=mssql
+EXTRACT_2_DB_HOST=10.0.0.25
+EXTRACT_2_DB_NAME=CONTPAQ_NORTE
+EXTRACT_2_DB_USER=reader
+EXTRACT_2_DB_PASSWORD=***</pre>
+<div class="callout"><b>Misma base, varias tablas:</b> repita las mismas credenciales en dos <code>EXTRACT_N</code> y asigne un script distinto a cada trabajo.</div>
+<h3>6.2 Ciclo de sincronización</h3>
 <table>
 <thead><tr><th>Variable</th><th>Uso</th><th>Default</th></tr></thead>
 <tbody>
-<tr><td>EXTRACTION_SCRIPT</td><td>Ruta del SQL de extracción.</td><td>./scripts/extraction.sql</td></tr>
-<tr><td>POLL_INTERVAL_MS</td><td>Espera entre ciclos completos.</td><td>2000</td></tr>
+<tr><td>POLL_INTERVAL_MS</td><td>Espera entre ciclos completos. Un ciclo recorre todas las extracciones.</td><td>2000</td></tr>
 <tr><td>INTER_TARGET_DELAY_MS</td><td>Espera después de cada destino, haya éxito o fallo.</td><td>300</td></tr>
 <tr><td>BATCH_SIZE</td><td>Filas máximas por transacción de destino.</td><td>250</td></tr>
 <tr><td>HEARTBEAT_SECONDS</td><td>Frecuencia mínima de log cuando no hay cambios.</td><td>300</td></tr>
 </tbody>
 </table>
 <h3>6.3 Destinos</h3>
-<p><code>DESTINATION_COUNT</code> acepta valores de 1 a 10. Para cada destino se utiliza el patrón <code>DEST_N_*</code>.</p>
+<p><code>DESTINATION_COUNT</code> acepta valores de 1 a 10. Todos los datos de todas las extracciones se intentan enviar a todos los destinos.</p>
 <table>
 <thead><tr><th>Variable</th><th>Descripción</th></tr></thead>
 <tbody>
 <tr><td>DEST_N_NAME</td><td>Nombre humano mostrado en logs.</td></tr>
-<tr><td>DEST_N_DB_TYPE</td><td>mssql, postgres o mysql.</td></tr>
-<tr><td>DEST_N_DB_URL</td><td>URL opcional de conexión.</td></tr>
-<tr><td>DEST_N_DB_HOST / PORT / NAME / USER / PASSWORD</td><td>Credenciales separadas cuando no se usa URL.</td></tr>
-<tr><td>DEST_N_DB_SSL / SSL_CA_PATH</td><td>Parámetros de TLS.</td></tr>
-<tr><td>DEST_N_HISTORICO</td><td><code>true</code> para insertar cada versión; <code>false</code> para mantener la fila actual.</td></tr>
-<tr><td>DEST_N_TARGET_TABLE</td><td>Opcional. Permite usar una tabla diferente a la definida en el script.</td></tr>
+<tr><td>DEST_N_DB_TYPE / DB_URL / HOST / PORT / NAME / USER / PASSWORD</td><td>Motor y credenciales del destino.</td></tr>
+<tr><td>DEST_N_HISTORICO</td><td><code>true</code> inserta una versión nueva; <code>false</code> mantiene una fila actual por identidad funcional.</td></tr>
+<tr><td>DEST_N_TARGET_TABLE</td><td>Opcional. Si se usa, fuerza todas las extracciones de ese destino a una misma tabla.</td></tr>
 </tbody>
 </table>
-<h3>6.4 Estado, logs y fallos</h3>
+<h3>6.4 Compatibilidad con v1.0.x</h3>
+<p>Si <code>EXTRACTION_COUNT</code> no existe, MCAAS aún acepta el formato anterior <code>SOURCE_DB_*</code> + <code>EXTRACTION_SCRIPT</code> como una sola extracción.</p>
+<h3>6.5 Estado, logs y fallos</h3>
 <table>
 <thead><tr><th>Variable</th><th>Descripción</th><th>Default</th></tr></thead>
 <tbody>
-<tr><td>STATE_DIR</td><td>Huella de sincronización y estado persistente.</td><td>./state</td></tr>
+<tr><td>STATE_DIR</td><td>Huellas de sincronización y estado persistente.</td><td>./state</td></tr>
 <tr><td>LOG_DIR</td><td>Directorio de logs.</td><td>./logs</td></tr>
 <tr><td>LOG_RETENTION_DAYS</td><td>Retención automática de logs diarios.</td><td>30</td></tr>
 <tr><td>DATA_FLAG_PER_ROW</td><td>Registra hashes de cambio sin valores.</td><td>true</td></tr>
 <tr><td>FAILURE_THRESHOLD</td><td>Número de fallos para considerar error persistente.</td><td>5</td></tr>
 <tr><td>FAILURE_WINDOW_HOURS</td><td>Ventana temporal para contar los fallos.</td><td>1</td></tr>
-<tr><td>AUTO_RESTART_DELAY_MS</td><td>Pausa antes de reiniciar el ciclo tras un fallo fatal.</td><td>5000</td></tr>
 </tbody>
 </table>
 </section>
 
 <section id="sql" class="page-break">
 <h2>7. Script SQL dinámico</h2>
-<p>El script SQL es el contrato de extracción. Puede sustituirse sin recompilar. Debe devolver un conjunto tabular y declarar la tabla destino y las columnas que identifican de forma única cada fila.</p>
-<pre>-- MCAAS_NAME=Clientes
--- MCAAS_TARGET_TABLE=clientes
--- MCAAS_KEY_COLUMNS=IdCliente,EmpresaId
+<p>Cada <code>EXTRACT_N</code> apunta a su propio script. El SQL define la tabla destino y las columnas clave de negocio.</p>
+<pre>-- MCAAS_TARGET_TABLE=empleados
+-- MCAAS_KEY_COLUMNS=empleado_id
 
 SELECT
-    IdCliente,
-    EmpresaId,
-    Nombre,
-    RFC,
-    FechaModificacion
-FROM dbo.Clientes;</pre>
-<h3>Cómo se convierte el resultado</h3>
-<p>Si el SELECT devuelve las columnas <code>IdCliente</code>, <code>Nombre</code> y <code>FechaModificacion</code>, el sender genera operaciones equivalentes a:</p>
-<pre>INSERT INTO clientes (IdCliente, Nombre, FechaModificacion)
-VALUES (?, ?, ?);</pre>
-<p>Los valores reales se envían como parámetros del driver. Esto evita problemas de comillas, tipos de datos y concatenación insegura.</p>
-<div class="callout warning"><b>Clave obligatoria:</b> las columnas indicadas en <code>MCAAS_KEY_COLUMNS</code> deben estar presentes en el SELECT, no pueden ser NULL y la combinación debe ser única dentro del resultado.</div>
+    id AS empleado_id,
+    nombre,
+    puesto,
+    fecha_modificacion
+FROM dbo.Empleados;</pre>
+<div class="callout warning"><b>Muy importante:</b> si la tabla destino usa <code>id</code> como PK autoincremental y <code>DESTINATION_AUTO_ID_COLUMN=id</code>, no devuelva el ID de origen con nombre <code>id</code>. Use un alias como <code>empleado_id</code>, <code>cliente_id</code> o <code>source_id</code>.</div>
+<h3>Fila final enviada</h3>
+<p>Si <code>EXTRACT_1_NAME=Empleados_Matriz</code> y <code>ORIGIN_FIELD_NAME=source_name</code>, MCAAS transforma conceptualmente:</p>
+<pre>{ empleado_id: 25, nombre: "Ana", puesto: "Ventas" }
+
+        en
+
+{ empleado_id: 25,
+  nombre: "Ana",
+  puesto: "Ventas",
+  source_name: "Empleados_Matriz" }</pre>
+<p>Los valores se envían como parámetros del driver, no concatenados directamente en SQL.</p>
 </section>
 
 <section id="cambios">
 <h2>8. Detección de filas nuevas y actualizadas</h2>
-<p>Para cada fila se calculan dos huellas:</p>
+<p>La identidad funcional de una fila está formada por la columna de origen y las claves del script:</p>
+<pre>identidad = ORIGIN_FIELD_NAME + MCAAS_KEY_COLUMNS</pre>
+<p>Ejemplo:</p>
+<pre>(source_name="Empleados_Matriz", empleado_id=25)
+(source_name="Empleados_Sucursal_Norte", empleado_id=25)</pre>
+<p>Aunque <code>empleado_id</code> sea igual, las identidades son diferentes.</p>
+<h3>Destino normal</h3>
 <ol>
-<li><b>Key hash:</b> SHA-256 de las columnas clave. Identifica la entidad sin guardar su valor en el log de banderas.</li>
-<li><b>Data hash:</b> SHA-256 de toda la fila normalizada. Permite saber si cambió cualquier columna seleccionada.</li>
+<li>MCAAS calcula un hash de la identidad y otro hash de toda la fila.</li>
+<li>Si la huella de datos cambió, intenta UPDATE usando <code>source_name + empleado_id</code> (o las claves equivalentes).</li>
+<li>Si el UPDATE no encuentra fila, ejecuta INSERT.</li>
+<li>La columna autoincremental del destino, por ejemplo <code>id</code>, no aparece en el INSERT/UPDATE y la genera la BD.</li>
+<li>Solo después del commit exitoso se actualiza el estado local del destino.</li>
 </ol>
-<p>El estado se guarda por stream y por destino en <code>state/sync-state.json</code>. Por eso, si Producción sincroniza y Shadow falla, únicamente Producción actualiza su marca local. Shadow conservará el cambio pendiente para el siguiente intento.</p>
-<h3>Resultado en destino normal</h3>
-<ol>
-<li>Busca por las columnas clave mediante un UPDATE parametrizado.</li>
-<li>Si el UPDATE afecta una fila, se considera actualización.</li>
-<li>Si no existe la clave, ejecuta INSERT.</li>
-<li>Solo después del commit exitoso se actualiza el estado local de ese destino.</li>
-</ol>
+<h3>Esquema recomendado</h3>
+<pre>CREATE TABLE empleados (
+    id BIGSERIAL PRIMARY KEY,
+    source_name TEXT NOT NULL,
+    empleado_id BIGINT NOT NULL,
+    nombre TEXT,
+    puesto TEXT,
+    UNIQUE (source_name, empleado_id)
+);</pre>
+<div class="callout success"><b>Resultado:</b> el backend puede usar el <code>id</code> interno para relaciones locales y, al mismo tiempo, conocer exactamente de qué sistema salió la entidad mediante <code>source_name + empleado_id</code>.</div>
 </section>
 
 <section id="historico">
 <h2>9. Modo HISTORICO</h2>
-<p>Cuando <code>DEST_N_HISTORICO=true</code>, MCAAS - DES conserva la detección de cambios, pero no intenta actualizar la fila existente. Cada versión nueva o modificada genera un INSERT.</p>
-<div class="callout"><b>Ejemplo:</b> un cliente se extrae a las 10:00. A las 10:15 cambia su nombre. El destino normal queda con el nombre nuevo; el destino histórico recibe una segunda fila con la versión nueva.</div>
-<p>La tabla histórica debe estar diseñada para aceptar múltiples filas con las mismas columnas clave de negocio. Es habitual añadir en la propia tabla un ID autonumérico o una marca temporal generada por la base. MCAAS - DES no agrega columnas que no existan en el SELECT.</p>
-<div class="callout warning"><b>Semántica de entrega:</b> el modo histórico es de tipo at-least-once. En una caída extremadamente puntual entre el commit remoto y el guardado del estado local, el siguiente arranque podría repetir ese INSERT. Si la ausencia absoluta de duplicados es crítica, diseñe el destino con una clave de idempotencia/versionado.</div>
+<p>Cuando <code>DEST_N_HISTORICO=true</code>, MCAAS conserva la detección de cambios por identidad funcional, pero no actualiza la fila existente. Cada versión nueva o modificada genera otro INSERT.</p>
+<p>El <code>id</code> autoincremental del destino sigue siendo generado por la base, por lo que cada versión obtiene una PK distinta.</p>
+<div class="callout"><b>Ejemplo:</b> <code>(Empleados_Matriz, empleado_id=25)</code> cambia de puesto. Un destino normal actualiza su fila; un destino histórico agrega una segunda versión.</div>
+<div class="callout warning"><b>No use UNIQUE(source_name, empleado_id) en una tabla histórica.</b> Use un índice normal o una clave que incluya versión/fecha si necesita restricciones adicionales.</div>
+<p>La semántica histórica continúa siendo at-least-once: una caída excepcional entre el commit remoto y el guardado del estado local puede repetir un INSERT.</p>
 </section>
 
 <section id="errores" class="page-break">
@@ -332,7 +368,7 @@ VALUES (?, ?, ?);</pre>
 <tbody>
 <tr><td>app-AAAA-MM-DD.log</td><td>Inicio, heartbeats, extracciones con cambios, envíos y mensajes comprensibles.</td></tr>
 <tr><td>error-AAAA-MM-DD.log</td><td>Solo eventos de nivel ERROR.</td></tr>
-<tr><td>data-flags-AAAA-MM-DD.ndjson</td><td>Banderas por cambio con hashes truncados, destino y tipo NEW/UPDATED. No incluye valores de la fila.</td></tr>
+<tr><td>data-flags-AAAA-MM-DD.ndjson</td><td>Banderas por cambio con hashes truncados, origen, destino y tipo NEW/UPDATED. No incluye valores de la fila.</td></tr>
 </tbody>
 </table>
 <p>El monitor abre una consola que hace tail del log de aplicación. Cerrar la consola no cierra el núcleo: el core corre como una tarea independiente.</p>
@@ -379,19 +415,23 @@ GMAIL_ALERT_TO=soporte@tu-dominio.com</pre>
 <pre>npm run typecheck
 npm test
 npm run validate</pre>
-<p><code>validate</code> revisa el .env, existencia del script y metadatos sin abrir conexiones.</p>
+<p><code>validate</code> revisa el <code>.env</code>, todas las extracciones, todos los scripts, tablas objetivo y claves declaradas sin abrir conexiones.</p>
 <h3>13.2 Conectividad</h3>
 <pre>npm run check:connections</pre>
-<p>Prueba origen y todos los destinos. No realiza sincronización.</p>
+<p>Prueba <b>todos los orígenes</b> y todos los destinos. No sincroniza datos.</p>
 <h3>13.3 Una sola ejecución</h3>
 <pre>npm run run:once</pre>
-<p>Ejecuta exactamente un ciclo completo. Es el comando recomendado antes de levantar el modo 24/7.</p>
-<h3>13.4 Con el ejecutable compilado</h3>
+<p>Ejecuta un ciclo completo: recorre todas las extracciones y las distribuye a todos los destinos.</p>
+<h3>13.4 Prueba específica de IDs repetidos</h3>
+<p>Antes de producción, prepare dos orígenes de staging donde exista el mismo ID de negocio y confirme que el destino crea dos filas diferenciadas por el campo de origen.</p>
+<pre>id | source_name               | empleado_id
+1  | Empleados_Matriz          | 25
+2  | Empleados_Sucursal_Norte  | 25</pre>
+<h3>13.5 Con el ejecutable compilado</h3>
 <pre>mcaas-des.exe --validate-config --config C:\ruta\.env
 mcaas-des.exe --check-connections --config C:\ruta\.env
 mcaas-des.exe --run-once --config C:\ruta\.env
 mcaas-des.exe --status --config C:\ruta\.env</pre>
-<div class="callout success"><b>Prueba controlada recomendada:</b> comience con una tabla destino de prueba, <code>DESTINATION_COUNT=1</code> y un SELECT pequeño. Verifique los datos y después agregue Producción/Shadow/Dev.</div>
 </section>
 
 <section id="build" class="page-break">
@@ -411,7 +451,7 @@ mcaas-des.exe --status --config C:\ruta\.env</pre>
 <pre>dist\windows\mcaas-des.exe
 dist\windows\MCAAS-DES-Windows-x64\
 dist\windows\MCAAS-DES-Windows-x64.zip
-dist\windows\MCAAS-DES-Setup-1.0.0.exe   (opcional)</pre>
+dist\windows\MCAAS-DES-Setup-1.1.0.exe   (opcional)</pre>
 </section>
 
 <section id="instalacion" class="page-break">
@@ -420,29 +460,27 @@ dist\windows\MCAAS-DES-Setup-1.0.0.exe   (opcional)</pre>
 <ol>
 <li>Compile MCAAS - DES en una PC de desarrollo.</li>
 <li>Copie <code>MCAAS-DES-Windows-x64.zip</code> al servidor.</li>
-<li>Extraiga la carpeta en una ubicación temporal.</li>
-<li>Abra PowerShell como Administrador.</li>
+<li>Extraiga la carpeta y abra PowerShell como Administrador.</li>
 <li>Ejecute:</li>
 </ol>
 <pre>powershell -ExecutionPolicy Bypass -File .\install.ps1</pre>
-<p>El instalador copia el binario a <code>C:\Program Files\MCAAS-DES</code> y crea la configuración/estado en <code>C:\ProgramData\MCAAS-DES</code>.</p>
+<p>El instalador copia el binario a <code>C:\Program Files\MCAAS-DES</code>, crea datos en <code>C:\ProgramData\MCAAS-DES</code> y copia todos los ejemplos <code>extraction*.sql</code> disponibles.</p>
 <h3>Configurar antes del arranque</h3>
 <ol>
 <li>Edite <code>C:\ProgramData\MCAAS-DES\.env</code>.</li>
-<li>Edite <code>C:\ProgramData\MCAAS-DES\scripts\extraction.sql</code>.</li>
-<li>Use un usuario de lectura para la base CONTPAQi.</li>
-<li>Configure 1 a 10 destinos.</li>
-<li>Si Aiven exige TLS, configure SSL y, cuando aplique, el archivo CA.</li>
+<li>Defina <code>EXTRACTION_COUNT</code>, <code>ORIGIN_FIELD_NAME</code> y <code>DESTINATION_AUTO_ID_COLUMN</code>.</li>
+<li>Configure cada <code>EXTRACT_N_NAME</code>, conexión y script.</li>
+<li>Agregue/edite los SQL en <code>C:\ProgramData\MCAAS-DES\scripts\</code>.</li>
+<li>Configure de 1 a 10 destinos.</li>
 </ol>
 <h3>Validar</h3>
 <pre>"C:\Program Files\MCAAS-DES\mcaas-des.exe" --validate-config --config "C:\ProgramData\MCAAS-DES\.env"
 "C:\Program Files\MCAAS-DES\mcaas-des.exe" --check-connections --config "C:\ProgramData\MCAAS-DES\.env"
 "C:\Program Files\MCAAS-DES\mcaas-des.exe" --run-once --config "C:\ProgramData\MCAAS-DES\.env"</pre>
 <h3>Activar 24/7</h3>
-<p>Ejecute <code>Start-MCAAS-DES.bat</code> como Administrador o inicie la tarea <b>MCAAS-DES Core</b> desde Task Scheduler. La tarea ya está configurada para arrancar con Windows.</p>
-<div class="callout"><b>Terminal:</b> al iniciar sesión se abre el monitor. Si alguien lo cierra, el core permanece ejecutándose en segundo plano. En un servidor sin sesión interactiva el core sigue funcionando, aunque naturalmente no habrá una ventana visible hasta que un usuario inicie sesión.</div>
+<p>Ejecute <code>Start-MCAAS-DES.bat</code> como Administrador o inicie la tarea <b>MCAAS-DES Core</b> desde Task Scheduler. El monitor visible continúa separado del núcleo.</p>
 <h3>Opción B: Setup.exe</h3>
-<p>Si compiló el instalador Inno Setup, ejecute <code>MCAAS-DES-Setup-1.0.0.exe</code> como Administrador y complete los mismos pasos de configuración/validación.</p>
+<p>Si compiló Inno Setup, ejecute <code>MCAAS-DES-Setup-1.1.0.exe</code> como Administrador y realice la misma validación.</p>
 </section>
 
 <section id="operacion">
@@ -450,20 +488,27 @@ dist\windows\MCAAS-DES-Setup-1.0.0.exe   (opcional)</pre>
 <h3>Comprobaciones periódicas</h3>
 <ul class="checklist">
 <li>El log diario contiene heartbeat reciente.</li>
+<li>Todas las extracciones esperadas aparecen en los logs.</li>
 <li>No existe error persistente activo.</li>
-<li>El espacio libre en disco es suficiente.</li>
-<li>Los destinos reciben filas nuevas/modificadas.</li>
-<li>El refresh token de Gmail sigue válido.</li>
+<li>Los destinos reciben filas nuevas/modificadas con el origen correcto.</li>
+<li>La PK autoincremental del destino continúa siendo generada por la BD.</li>
 </ul>
-<h3>Después de cambiar el SQL</h3>
-<p>Ejecute <code>--validate-config</code>, luego <code>--run-once</code>. Si cambia la tabla destino o las columnas clave, MCAAS - DES crea un stream de estado distinto, por lo que puede producir una resincronización.</p>
-<h3>Después de cambiar credenciales</h3>
-<p>Guarde el .env, pruebe <code>--check-connections</code> y, si había un error persistente, ejecute <code>--clear-persistent-error</code>.</p>
+<h3>Agregar una extracción nueva</h3>
+<ol>
+<li>Aumente <code>EXTRACTION_COUNT</code>.</li>
+<li>Agregue el bloque <code>EXTRACT_N_*</code> con un nombre único.</li>
+<li>Cree el archivo SQL correspondiente.</li>
+<li>Ejecute <code>--validate-config</code> y <code>--check-connections</code>.</li>
+<li>Ejecute <code>--run-once</code> y verifique el destino.</li>
+<li>Reinicie la tarea Core para cargar la nueva configuración.</li>
+</ol>
+<h3>Cambiar un EXTRACT_N_NAME</h3>
+<div class="callout warning"><b>Trátelo como cambio de identidad.</b> Al cambiar el nombre, las filas pasarán a tener un origen distinto y pueden insertarse como entidades nuevas. Mantenga el nombre estable salvo que ese comportamiento sea intencional.</div>
 <h3>Respaldos recomendados</h3>
 <ul>
 <li><code>.env</code>, protegido como secreto.</li>
-<li><code>scripts/extraction.sql</code>.</li>
-<li><code>state/</code>, si desea conservar exactamente las huellas ya enviadas.</li>
+<li>Todos los <code>scripts/extraction*.sql</code>.</li>
+<li><code>state/</code>, para conservar las huellas ya enviadas.</li>
 </ul>
 </section>
 
@@ -487,14 +532,15 @@ dist\windows\MCAAS-DES-Setup-1.0.0.exe   (opcional)</pre>
 <table>
 <thead><tr><th>Tema</th><th>Comportamiento actual</th></tr></thead>
 <tbody>
-<tr><td>Tiempo real</td><td>Polling configurable, no CDC/binlog nativo. El mínimo práctico depende del tamaño del SELECT y de la red.</td></tr>
-<tr><td>Deletes</td><td>No propaga eliminaciones de la base origen.</td></tr>
+<tr><td>Tiempo real</td><td>Polling configurable, no CDC/binlog nativo.</td></tr>
+<tr><td>Deletes</td><td>No propaga eliminaciones del origen.</td></tr>
 <tr><td>DDL</td><td>No crea ni migra tablas destino.</td></tr>
-<tr><td>Esquemas distintos</td><td>Puede sobrescribir la tabla por destino con DEST_N_TARGET_TABLE, pero las columnas deben corresponder.</td></tr>
-<tr><td>Claves duplicadas</td><td>Se consideran un error de extracción porque impiden identificar una fila de forma estable.</td></tr>
+<tr><td>Esquemas</td><td>Cada target debe ser compatible con las columnas de su SELECT y con <code>ORIGIN_FIELD_NAME</code>.</td></tr>
+<tr><td>IDs repetidos</td><td>Son válidos entre orígenes distintos; no son válidos dos veces dentro de la misma extracción para la misma combinación de claves.</td></tr>
+<tr><td>PK autoincremental</td><td>Debe quedar fuera del SELECT usando alias para el ID de negocio cuando sea necesario.</td></tr>
 <tr><td>Histórico</td><td>At-least-once; una caída en la ventana commit remoto/estado local puede producir duplicado.</td></tr>
-<tr><td>Volumen</td><td>El estado local es JSON. Para datasets de millones de filas o cargas masivas continuas conviene evolucionar el estado a SQLite/LevelDB o usar watermark/CDC.</td></tr>
-<tr><td>Cambios de schema</td><td>Si el SELECT agrega/quita columnas, los hashes cambian y los destinos deben aceptar el nuevo schema.</td></tr>
+<tr><td>Volumen</td><td>El estado local es JSON. Para datasets de millones de filas conviene evolucionar a SQLite/LevelDB, watermark o CDC.</td></tr>
+<tr><td>Renombrar origen</td><td>Cambiar <code>EXTRACT_N_NAME</code> cambia la identidad funcional y puede provocar resinserción.</td></tr>
 </tbody>
 </table>
 </section>
@@ -521,20 +567,17 @@ mcaas-des.exe --validate-config --config C:\ruta\.env
 mcaas-des.exe --check-connections --config C:\ruta\.env
 mcaas-des.exe --status --config C:\ruta\.env
 mcaas-des.exe --monitor --config C:\ruta\.env
-mcaas-des.exe --clear-persistent-error --config C:\ruta\.env
-mcaas-des.exe --version
-mcaas-des.exe --help</pre>
+mcaas-des.exe --clear-persistent-error --config C:\ruta\.env</pre>
 <h3>Checklist post-lanzamiento</h3>
 <ul class="checklist">
-<li>Primer <code>--run-once</code> terminó sin error.</li>
+<li>Cada <code>EXTRACT_N_NAME</code> es único y aparece correctamente en destino.</li>
+<li>Se probó al menos un ID repetido entre dos orígenes.</li>
+<li>El ID autoincremental del destino es generado por la BD, no por MCAAS.</li>
 <li>Los destinos contienen los registros esperados.</li>
-<li>El log de banderas no muestra información sensible.</li>
 <li>La tarea MCAAS-DES Core está Running.</li>
-<li>Reinicio de prueba del servidor confirmó autoarranque.</li>
-<li>Se probó la alerta Gmail en un ambiente controlado.</li>
-<li>Se documentaron responsables y procedimiento para limpiar error persistente.</li>
+<li>Un reinicio de prueba confirmó autoarranque.</li>
 </ul>
-<div class="footer-note">MCAAS - DES 1.0.0 - Middle - Connector as a Service - Database Extractor n Sender. Manual orientado a operación de infraestructura y sincronización de datos.</div>
+<div class="footer-note">MCAAS - DES 1.1.0 - Middle - Connector as a Service - Database Extractor n Sender.</div>
 </section>
 </body>
 </html>

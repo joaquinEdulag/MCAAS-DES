@@ -52,6 +52,18 @@ export function canonicalKeyColumns(columns: string[], requested: string[]): str
   return requested.map((key) => insensitive.get(key.toLowerCase()) || key);
 }
 
+
+export function assertAutoIdNotProvided(columns: string[], autoIdColumn?: string): void {
+  if (!autoIdColumn) return;
+  const collision = columns.find((column) => column.toLowerCase() === autoIdColumn.toLowerCase());
+  if (collision) {
+    throw new Error(
+      `La extracción devuelve la columna "${collision}", pero DESTINATION_AUTO_ID_COLUMN=${autoIdColumn} está reservada para la PK autoincremental del destino. ` +
+      `Use un alias en el SELECT (por ejemplo: ${collision} AS source_${collision}).`,
+    );
+  }
+}
+
 export function assertNonNullKeys(row: RowData, keyColumns: string[]): void {
   for (const key of keyColumns) {
     if (row[key] === null || row[key] === undefined) {

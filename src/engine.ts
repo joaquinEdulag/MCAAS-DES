@@ -1,7 +1,7 @@
-import type { AppConfig, DestinationConfig, RowData } from './types.js';
+import type { AppConfig, DestinationConfig, ExtractionConfig, RowData } from './types.js';
 import { createAdapter } from './db/index.js';
 import type { DatabaseAdapter } from './db/base.js';
-import { canonicalKeyColumns, rowColumns, validateKeys } from './db/base.js';
+import { assertAutoIdNotProvided, canonicalKeyColumns, rowColumns, validateKeys } from './db/base.js';
 import { parseExtractionScript } from './sql-script.js';
 import { SyncStateStore } from './state-store.js';
 import { FailureTracker } from './failure-tracker.js';
@@ -9,8 +9,13 @@ import { Logger } from './logger.js';
 import { sendPersistentErrorEmail } from './gmail.js';
 import { sanitizeError, sleep } from './utils.js';
 
+interface SourceRuntime {
+  config: ExtractionConfig;
+  adapter: DatabaseAdapter;
+}
+
 export class SyncEngine {
-  private readonly source: DatabaseAdapter;
+  private readonly sources: SourceRuntime[];
   private readonly destinations: Array<{ config: DestinationConfig; adapter: DatabaseAdapter }>;
   private readonly state: SyncStateStore;
   private lastHeartbeatAt = 0;
@@ -20,25 +25,31 @@ export class SyncEngine {
     private readonly logger: Logger,
     private readonly failures: FailureTracker,
   ) {
-    this.source = createAdapter(config.source);
+    this.sources = config.extractions.map((extraction) => ({ config: extraction, adapter: createAdapter(extraction.source) }));
     this.destinations = config.destinations.map((destination) => ({ config: destination, adapter: createAdapter(destination) }));
     this.state = new SyncStateStore(config.stateDir);
   }
 
   async connectAll(): Promise<void> {
-    await this.source.connect();
+    for (const { adapter } of this.sources) await adapter.connect();
     for (const { adapter } of this.destinations) await adapter.connect();
   }
 
   async disconnectAll(): Promise<void> {
-    await Promise.allSettled([this.source.disconnect(), ...this.destinations.map(({ adapter }) => adapter.disconnect())]);
+    await Promise.allSettled([
+      ...this.sources.map(({ adapter }) => adapter.disconnect()),
+      ...this.destinations.map(({ adapter }) => adapter.disconnect()),
+    ]);
   }
 
   async checkConnections(): Promise<void> {
-    this.logger.info('Validando conexión con la base de datos origen...');
-    await this.source.connect();
-    await this.source.ping();
-    this.logger.success(`Conexión origen correcta: ${this.config.source.name}.`);
+    for (const { config, adapter } of this.sources) {
+      const name = config.name || config.id;
+      this.logger.info(`Validando conexión con origen de extracción "${name}"...`);
+      await adapter.connect();
+      await adapter.ping();
+      this.logger.success(`Conexión origen correcta: ${name} (${config.source.type}).`);
+    }
     for (const { config, adapter } of this.destinations) {
       this.logger.info(`Validando conexión con ${config.name}...`);
       await adapter.connect();
@@ -65,11 +76,12 @@ export class SyncEngine {
     }
   }
 
-  private flagChanges(destination: DestinationConfig, streamId: string, changes: ReturnType<SyncStateStore['classify']>): void {
+  private flagChanges(destination: DestinationConfig, streamId: string, originName: string, changes: ReturnType<SyncStateStore['classify']>): void {
     if (!this.config.dataFlagPerRow) return;
     for (const change of changes) {
       this.logger.dataFlag({
         streamId,
+        origin: originName,
         destination: destination.name,
         event: change.kind,
         rowFingerprint: change.keyHash.slice(0, 24),
@@ -78,58 +90,128 @@ export class SyncEngine {
     }
   }
 
-  async runCycle(forceLog = false): Promise<{ rows: number; changes: number; errors: number }> {
-    const script = parseExtractionScript(this.config.extractionScriptPath, this.config.fallbackTargetTable, this.config.fallbackKeyColumns);
-    await this.source.connect();
-    const rows = await this.source.select(script.sql);
+  private addOriginField(rows: RowData[], originName: string): RowData[] {
     const columns = rowColumns(rows);
-    if (rows.length) validateKeys(columns, script.keyColumns);
-    const keys = rows.length ? canonicalKeyColumns(columns, script.keyColumns) : script.keyColumns;
-    const streamId = SyncStateStore.streamId(script.name, script.targetTable, keys);
+    if (!columns.length) return rows;
+    assertAutoIdNotProvided(columns, this.config.destinationAutoIdColumn);
+    if (!this.config.originFieldName) return rows;
+    const originCollision = columns.find((column) => column.toLowerCase() === this.config.originFieldName!.toLowerCase());
+    if (originCollision) {
+      throw new Error(
+        `La extracción "${originName}" ya devuelve una columna llamada "${originCollision}", reservada por ORIGIN_FIELD_NAME=${this.config.originFieldName}. ` +
+        'Cambie el alias de esa columna en el SELECT o cambie ORIGIN_FIELD_NAME.',
+      );
+    }
+    return rows.map((row) => ({ ...row, [this.config.originFieldName!]: originName }));
+  }
+
+  private async runExtraction(sourceRuntime: SourceRuntime): Promise<{ rows: number; changes: number; errors: number }> {
+    const { config: extraction, adapter: source } = sourceRuntime;
+    const script = parseExtractionScript(extraction.scriptPath, extraction.fallbackTargetTable, extraction.fallbackKeyColumns);
+    const originName = extraction.name || script.name;
+
+    this.logger.info(`Extracción iniciada: ${originName}.`);
+    await source.connect();
+    const rawRows = await source.select(script.sql);
+    const rawColumns = rowColumns(rawRows);
+    if (rawRows.length) validateKeys(rawColumns, script.keyColumns);
+    const sourceKeys = rawRows.length ? canonicalKeyColumns(rawColumns, script.keyColumns) : script.keyColumns;
+    const rows = this.addOriginField(rawRows, originName);
+    const destinationKeys = this.config.originFieldName ? [...sourceKeys, this.config.originFieldName] : sourceKeys;
+    const streamId = SyncStateStore.streamId(originName, script.targetTable, destinationKeys);
+
     let totalChanges = 0;
     let errors = 0;
 
     for (const { config: destination, adapter } of this.destinations) {
+      if (this.failures.isPersistent()) break;
       try {
-        const changes = this.state.classify(streamId, destination.id, rows, keys);
+        const changes = this.state.classify(streamId, destination.id, rows, destinationKeys);
         totalChanges += changes.length;
         if (!changes.length) continue;
-        this.flagChanges(destination, streamId, changes);
+
+        this.flagChanges(destination, streamId, originName, changes);
         const newCount = changes.filter((change) => change.kind === 'NEW').length;
         const updatedCount = changes.length - newCount;
         const targetTable = destination.targetTableOverride || script.targetTable;
-        this.logger.info(`${destination.name}: ${changes.length} cambio(s) detectado(s) (${newCount} nuevo(s), ${updatedCount} actualizado(s)). Envío iniciado.`);
+        this.logger.info(
+          `${originName} -> ${destination.name}: ${changes.length} cambio(s) detectado(s) ` +
+          `(${newCount} nuevo(s), ${updatedCount} actualizado(s)). Tabla: ${targetTable}.`,
+        );
+
         await adapter.connect();
         const result = await adapter.applyRows({
           table: targetTable,
-          keyColumns: keys,
+          keyColumns: destinationKeys,
           rows: changes.map((change) => change.row),
           historical: destination.historical,
           batchSize: this.config.batchSize,
+          autoIdColumn: this.config.destinationAutoIdColumn,
         });
         this.state.commit(streamId, destination.id, changes);
-        this.logger.success(`${destination.name}: sincronización completada. Insertados: ${result.inserted}; actualizados: ${result.updated}.`);
+        this.logger.success(
+          `${originName} -> ${destination.name}: sincronización completada. ` +
+          `Insertados: ${result.inserted}; actualizados: ${result.updated}.`,
+        );
       } catch (error) {
         errors += 1;
-        this.logger.error(`${destination.name}: el envío falló. Se reintentará automáticamente mientras no exista error persistente.`, error);
+        this.logger.error(
+          `${originName} -> ${destination.name}: el envío falló. Se reintentará automáticamente mientras no exista error persistente.`,
+          error,
+        );
         await adapter.disconnect().catch(() => undefined);
-        const { becamePersistent } = this.failures.recordFailure(`${destination.name}: ${sanitizeError(error)}`);
+        const { becamePersistent } = this.failures.recordFailure(`${originName} -> ${destination.name}: ${sanitizeError(error)}`);
         if (becamePersistent || this.failures.isPersistent()) {
           await this.notifyPersistentIfNeeded();
           break;
         }
       } finally {
+        // Mantiene el ritmo solicitado incluso después de un INSERT/UPDATE fallido.
         await sleep(this.config.interTargetDelayMs);
+      }
+    }
+
+    this.logger.info(`Extracción ${originName} completada: ${rawRows.length} fila(s) leída(s), ${totalChanges} cambio(s) por destino, ${errors} error(es).`);
+    return { rows: rawRows.length, changes: totalChanges, errors };
+  }
+
+  async runCycle(forceLog = false): Promise<{ rows: number; changes: number; errors: number; extractions: number }> {
+    let totalRows = 0;
+    let totalChanges = 0;
+    let errors = 0;
+    let completedExtractions = 0;
+
+    for (const sourceRuntime of this.sources) {
+      if (this.failures.isPersistent()) break;
+      const originName = sourceRuntime.config.name || sourceRuntime.config.id;
+      try {
+        const result = await this.runExtraction(sourceRuntime);
+        totalRows += result.rows;
+        totalChanges += result.changes;
+        errors += result.errors;
+        completedExtractions += 1;
+      } catch (error) {
+        errors += 1;
+        this.logger.error(`La extracción "${originName}" falló antes de completar el envío. Las demás extracciones se conservarán activas si el error no es persistente.`, error);
+        await sourceRuntime.adapter.disconnect().catch(() => undefined);
+        const result = this.failures.recordFailure(`${originName}: ${sanitizeError(error)}`);
+        if (result.becamePersistent || this.failures.isPersistent()) {
+          await this.notifyPersistentIfNeeded();
+          break;
+        }
       }
     }
 
     const now = Date.now();
     const heartbeatDue = now - this.lastHeartbeatAt >= this.config.heartbeatSeconds * 1000;
     if (forceLog || totalChanges > 0 || errors > 0 || heartbeatDue) {
-      this.logger.info(`Extracción completada: ${rows.length} fila(s) leída(s), ${totalChanges} cambio(s) por enviar, ${errors} error(es).`);
+      this.logger.info(
+        `Ciclo completado: ${completedExtractions}/${this.sources.length} extracción(es), ` +
+        `${totalRows} fila(s) leída(s), ${totalChanges} cambio(s) por destino, ${errors} error(es).`,
+      );
       this.lastHeartbeatAt = now;
     }
-    return { rows: rows.length, changes: totalChanges, errors };
+    return { rows: totalRows, changes: totalChanges, errors, extractions: completedExtractions };
   }
 
   statusSummary(): Record<string, unknown> {

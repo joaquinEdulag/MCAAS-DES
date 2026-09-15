@@ -19,6 +19,16 @@ export interface DbConfig {
   queryTimeoutMs: number;
 }
 
+export interface ExtractionConfig {
+  id: string;
+  /** Nombre lógico estable. Se guarda también en la columna de origen del destino. */
+  name?: string;
+  source: DbConfig;
+  scriptPath: string;
+  fallbackTargetTable?: string;
+  fallbackKeyColumns: string[];
+}
+
 export interface DestinationConfig extends DbConfig {
   historical: boolean;
   targetTableOverride?: string;
@@ -38,9 +48,12 @@ export interface AppConfig {
   appName: string;
   configPath: string;
   configDir: string;
-  source: DbConfig;
+  extractions: ExtractionConfig[];
   destinations: DestinationConfig[];
-  extractionScriptPath: string;
+  /** Columna agregada a cada fila para identificar de qué extracción/origen provino. */
+  originFieldName?: string;
+  /** PK autoincremental administrada por el destino. Si está definida, nunca debe venir en el SELECT. */
+  destinationAutoIdColumn?: string;
   pollIntervalMs: number;
   interTargetDelayMs: number;
   batchSize: number;
@@ -49,8 +62,6 @@ export interface AppConfig {
   logRetentionDays: number;
   dataFlagPerRow: boolean;
   heartbeatSeconds: number;
-  fallbackTargetTable?: string;
-  fallbackKeyColumns: string[];
   failureThreshold: number;
   failureWindowHours: number;
   restartDelayMs: number;
@@ -98,10 +109,13 @@ export interface PersistentErrorState {
 
 export interface ApplyRowsRequest {
   table: string;
+  /** Columnas de identidad funcional en el destino (origen + claves del sistema origen). */
   keyColumns: string[];
   rows: RowData[];
   historical: boolean;
   batchSize: number;
+  /** Columna PK autoincremental del destino. MCAAS no la escribe. */
+  autoIdColumn?: string;
 }
 
 export interface ApplyRowsResult {

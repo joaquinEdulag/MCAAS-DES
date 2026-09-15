@@ -1,6 +1,6 @@
 {
   "name": "mcaas-des",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Middle - Connector as a Service - Database Extractor n Sender",
   "private": true,
   "main": "build/index.js",

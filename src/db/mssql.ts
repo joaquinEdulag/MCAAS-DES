@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import sql from 'mssql';
 import type { DbConfig, ApplyRowsRequest, ApplyRowsResult, RowData } from '../types.js';
 import type { DatabaseAdapter } from './base.js';
-import { assertNonNullKeys, canonicalKeyColumns, chunks, rowColumns, tableParts, validateKeys } from './base.js';
+import { assertAutoIdNotProvided, assertNonNullKeys, canonicalKeyColumns, chunks, rowColumns, tableParts, validateKeys } from './base.js';
 
 function q(identifier: string): string { return `[${identifier.replace(/]/g, ']]')}]`; }
 function qt(table: string): string { return tableParts(table).map(q).join('.'); }
@@ -33,6 +33,7 @@ export class MssqlAdapter implements DatabaseAdapter {
   async applyRows(request: ApplyRowsRequest): Promise<ApplyRowsResult> {
     const columns = rowColumns(request.rows);
     if (!columns.length) return { inserted: 0, updated: 0 };
+    assertAutoIdNotProvided(columns, request.autoIdColumn);
     validateKeys(columns, request.keyColumns);
     const keys = canonicalKeyColumns(columns, request.keyColumns);
     let inserted = 0, updated = 0;

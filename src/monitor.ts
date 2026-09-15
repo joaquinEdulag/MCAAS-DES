@@ -11,7 +11,10 @@ function printHeader(config: AppConfig, failures: FailureTracker): void {
   console.log(' MCAAS - DES | Middle - Connector as a Service');
   console.log(' Database Extractor n Sender | Monitor de operación');
   console.log('==============================================================');
-  console.log(`Origen: ${config.source.name} (${config.source.type})`);
+  console.log(`Extracciones: ${config.extractions.length} | Campo origen: ${config.originFieldName || 'deshabilitado (legacy)'}`);
+  for (const extraction of config.extractions) {
+    console.log(`  - ${extraction.name || extraction.id} (${extraction.source.type}) -> ${extraction.scriptPath}`);
+  }
   console.log(`Destinos: ${config.destinations.map((d) => `${d.name}${d.historical ? ' [HISTORICO]' : ''}`).join(', ')}`);
   console.log(`Estado persistente: ${failures.reload().active ? 'ACTIVO - REQUIERE ATENCION' : 'sin error persistente'}`);
   console.log('Cerrar esta ventana NO detiene el motor instalado en segundo plano.');

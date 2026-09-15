@@ -18,7 +18,7 @@ Assert-Administrator
 $SourceDir = $PSScriptRoot
 $ExeSource = Join-Path $SourceDir 'mcaas-des.exe'
 $EnvExample = Join-Path $SourceDir '.env.example'
-$SqlExample = Join-Path $SourceDir 'extraction.sql'
+$SqlExamples = Get-ChildItem -Path $SourceDir -Filter 'extraction*.sql' -File -ErrorAction SilentlyContinue
 $IconSource = Join-Path $SourceDir 'mcaas-des-icon.png'
 
 if (-not (Test-Path $ExeSource)) { throw "No se encontró $ExeSource" }
@@ -35,8 +35,9 @@ Copy-Item $EnvExample (Join-Path $DataDir '.env.example') -Force
 if (-not (Test-Path (Join-Path $DataDir '.env'))) {
     Copy-Item $EnvExample (Join-Path $DataDir '.env')
 }
-if (-not (Test-Path (Join-Path $DataDir 'scripts\extraction.sql'))) {
-    Copy-Item $SqlExample (Join-Path $DataDir 'scripts\extraction.sql')
+foreach ($SqlExample in $SqlExamples) {
+    $TargetSql = Join-Path (Join-Path $DataDir 'scripts') $SqlExample.Name
+    if (-not (Test-Path $TargetSql)) { Copy-Item $SqlExample.FullName $TargetSql }
 }
 
 $ExePath = Join-Path $InstallDir 'mcaas-des.exe'

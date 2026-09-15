@@ -1,5 +1,5 @@
 #define MyAppName "MCAAS - DES"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "MCAAS"
 #define MyAppExeName "mcaas-des.exe"
 
@@ -34,7 +34,7 @@ Source: "..\scripts\register-tasks.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\scripts\unregister-tasks.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\.env.example"; DestDir: "{commonappdata}\MCAAS-DES"; Flags: ignoreversion
 Source: "..\.env.example"; DestDir: "{commonappdata}\MCAAS-DES"; DestName: ".env"; Flags: onlyifdoesntexist uninsneveruninstall
-Source: "..\scripts\extraction.sql"; DestDir: "{commonappdata}\MCAAS-DES\scripts"; Flags: onlyifdoesntexist uninsneveruninstall
+Source: "..\scripts\extraction*.sql"; DestDir: "{commonappdata}\MCAAS-DES\scripts"; Flags: onlyifdoesntexist uninsneveruninstall
 Source: "..\docs\Manual_MCAAS_DES.pdf"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
