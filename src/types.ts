@@ -21,7 +21,7 @@ export interface DbConfig {
 
 export interface ExtractionConfig {
   id: string;
-  /** Nombre lógico estable. Se guarda también en la columna de origen del destino. */
+  /** Nombre lógico estable de la extracción. */
   name?: string;
   source: DbConfig;
   scriptPath: string;
@@ -52,7 +52,7 @@ export interface AppConfig {
   destinations: DestinationConfig[];
   /** Columna agregada a cada fila para identificar de qué extracción/origen provino. */
   originFieldName?: string;
-  /** PK autoincremental administrada por el destino. Si está definida, nunca debe venir en el SELECT. */
+  /** PK/ID administrado por el destino. Si está definida, nunca debe venir en el SELECT. */
   destinationAutoIdColumn?: string;
   pollIntervalMs: number;
   interTargetDelayMs: number;
@@ -114,7 +114,7 @@ export interface ApplyRowsRequest {
   rows: RowData[];
   historical: boolean;
   batchSize: number;
-  /** Columna PK autoincremental del destino. MCAAS no la escribe. */
+  /** Columna PK/ID generado por el destino. MCAAS no la escribe. */
   autoIdColumn?: string;
 }
 

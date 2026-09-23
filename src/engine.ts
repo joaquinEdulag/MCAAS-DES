@@ -118,7 +118,6 @@ export class SyncEngine {
     const sourceKeys = rawRows.length ? canonicalKeyColumns(rawColumns, script.keyColumns) : script.keyColumns;
     const rows = this.addOriginField(rawRows, originName);
     const destinationKeys = this.config.originFieldName ? [...sourceKeys, this.config.originFieldName] : sourceKeys;
-    const streamId = SyncStateStore.streamId(originName, script.targetTable, destinationKeys);
 
     let totalChanges = 0;
     let errors = 0;
@@ -126,6 +125,11 @@ export class SyncEngine {
     for (const { config: destination, adapter } of this.destinations) {
       if (this.failures.isPersistent()) break;
       try {
+        const targetTable = destination.targetTableOverride || script.targetTable;
+        // El estado debe depender de la tabla REAL de destino. De lo contrario,
+        // cambiar DEST_N_TARGET_TABLE podria reutilizar huellas de otra tabla y
+        // omitir escrituras que aun no existen en el nuevo destino.
+        const streamId = SyncStateStore.streamId(originName, targetTable, destinationKeys);
         const changes = this.state.classify(streamId, destination.id, rows, destinationKeys);
         totalChanges += changes.length;
         if (!changes.length) continue;
@@ -133,7 +137,6 @@ export class SyncEngine {
         this.flagChanges(destination, streamId, originName, changes);
         const newCount = changes.filter((change) => change.kind === 'NEW').length;
         const updatedCount = changes.length - newCount;
-        const targetTable = destination.targetTableOverride || script.targetTable;
         this.logger.info(
           `${originName} -> ${destination.name}: ${changes.length} cambio(s) detectado(s) ` +
           `(${newCount} nuevo(s), ${updatedCount} actualizado(s)). Tabla: ${targetTable}.`,

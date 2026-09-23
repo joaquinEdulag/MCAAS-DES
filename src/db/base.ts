@@ -58,7 +58,7 @@ export function assertAutoIdNotProvided(columns: string[], autoIdColumn?: string
   const collision = columns.find((column) => column.toLowerCase() === autoIdColumn.toLowerCase());
   if (collision) {
     throw new Error(
-      `La extracción devuelve la columna "${collision}", pero DESTINATION_AUTO_ID_COLUMN=${autoIdColumn} está reservada para la PK autoincremental del destino. ` +
+      `La extracción devuelve la columna "${collision}", pero DESTINATION_AUTO_ID_COLUMN=${autoIdColumn} está reservada para la PK/ID generado por el destino. ` +
       `Use un alias en el SELECT (por ejemplo: ${collision} AS source_${collision}).`,
     );
   }

@@ -16,7 +16,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "bundle": "ncc build src/index.ts -o build --minify",
-    "build:win": "npm run typecheck && npm run test && npm run bundle && node scripts/build-windows.mjs",
+    "build:win": "pnpm run typecheck && pnpm test && pnpm run bundle && node scripts/build-windows.mjs",
     "package:zip": "node scripts/package-project.mjs",
     "package:release": "node scripts/package-release.mjs",
     "installer:win": "node scripts/build-installer.mjs"
@@ -42,5 +42,6 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "packageManager": "pnpm@11.24.0"
 }

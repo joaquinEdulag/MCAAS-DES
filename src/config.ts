@@ -75,6 +75,16 @@ function isMultiExtractionMode(): boolean {
   return process.env.EXTRACTION_COUNT !== undefined || Object.keys(process.env).some((key) => /^EXTRACT_\d+_/.test(key));
 }
 
+
+export function resolveOriginFieldName(includeSourceName: boolean, originSetting: string | undefined, multiMode: boolean): string | undefined {
+  if (!includeSourceName) return undefined;
+  const originRaw = originSetting?.trim();
+  if (originSetting !== undefined) {
+    return originRaw ? validateSimpleColumnName(originRaw, 'ORIGIN_FIELD_NAME') : undefined;
+  }
+  return multiMode ? 'mcaas_origin' : undefined;
+}
+
 function readExtractions(configDir: string): ExtractionConfig[] {
   const newMode = isMultiExtractionMode();
 
@@ -100,7 +110,7 @@ function readExtractions(configDir: string): ExtractionConfig[] {
   for (let i = 1; i <= count; i += 1) {
     const prefix = `EXTRACT_${i}`;
     const name = process.env[`${prefix}_NAME`]?.trim();
-    if (!name) throw new Error(`${prefix}_NAME es obligatorio. Este nombre identifica el origen y se guarda en cada fila destino.`);
+    if (!name) throw new Error(`${prefix}_NAME es obligatorio. Este nombre identifica logicamente la extraccion.`);
     const normalized = name.toLocaleLowerCase();
     if (names.has(normalized)) throw new Error(`Los nombres de extracción deben ser únicos. Nombre repetido: ${name}`);
     names.add(normalized);
@@ -150,12 +160,15 @@ export function loadConfig(): AppConfig {
     });
   }
 
-  const originRaw = process.env.ORIGIN_FIELD_NAME?.trim();
-  const originFieldName = originRaw
-    ? validateSimpleColumnName(originRaw, 'ORIGIN_FIELD_NAME')
-    : isMultiExtractionMode()
-      ? 'mcaas_origin'
-      : undefined;
+  // INCLUDE_SOURCE_NAME=false fuerza una sincronizacion directa y evita agregar
+  // source_name/mcaas_origin aun cuando ORIGIN_FIELD_NAME tenga un valor configurado.
+  // Si esta habilitado, se conserva el comportamiento historico de ORIGIN_FIELD_NAME.
+  const includeSourceName = parseBoolean(process.env.INCLUDE_SOURCE_NAME, true);
+  const originFieldName = resolveOriginFieldName(
+    includeSourceName,
+    process.env.ORIGIN_FIELD_NAME,
+    isMultiExtractionMode(),
+  );
   const autoIdRaw = process.env.DESTINATION_AUTO_ID_COLUMN?.trim();
   const destinationAutoIdColumn = autoIdRaw ? validateSimpleColumnName(autoIdRaw, 'DESTINATION_AUTO_ID_COLUMN') : undefined;
   if (destinationAutoIdColumn && originFieldName && destinationAutoIdColumn.toLowerCase() === originFieldName.toLowerCase()) {
@@ -216,7 +229,7 @@ export function safeConfigSummary(config: AppConfig): Record<string, unknown> {
   return {
     appName: config.appName,
     configPath: config.configPath,
-    originFieldName: config.originFieldName || '[deshabilitado - modo legacy]',
+    originFieldName: config.originFieldName || '[deshabilitado]',
     destinationAutoIdColumn: config.destinationAutoIdColumn || '[no configurada]',
     extractions: config.extractions.map((extraction) => ({
       id: extraction.id,

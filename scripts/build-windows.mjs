@@ -8,7 +8,7 @@ const run = (cmd, args) => {
   const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} falló con código ${r.status}`);
 };
-const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const dist = path.join(root, 'dist', 'windows');
 const release = path.join(dist, 'MCAAS-DES-Windows-x64');
 fs.rmSync(release, { recursive: true, force: true });
@@ -17,10 +17,10 @@ const baseExe = path.join(dist, 'mcaas-des-base.exe');
 const finalExe = path.join(dist, 'mcaas-des.exe');
 fs.rmSync(baseExe, { force: true }); fs.rmSync(finalExe, { force: true });
 
-run(npx, ['--no-install', 'pkg', 'build/index.js', '-t', 'node22-win-x64', '--sea', '-o', baseExe]);
+run(pnpm, ['exec', 'pkg', 'build/index.js', '-t', 'node22-win-x64', '--sea', '-o', baseExe]);
 
 try {
-  run(npx, ['--no-install', 'resedit', baseExe, finalExe,
+  run(pnpm, ['exec', 'resedit', baseExe, finalExe,
     '--ignore-signed',
     '--icon', `1,${path.join(root, 'assets', 'mcaas-des.ico')}`,
     '--company-name', 'MCAAS',

@@ -5,6 +5,12 @@ import { describe, expect, it } from 'vitest';
 import { SyncStateStore } from '../src/state-store.js';
 
 describe('SyncStateStore', () => {
+  it('cambia el stream cuando cambia la tabla destino efectiva', () => {
+    const a = SyncStateStore.streamId('Empresa_CONTPAQi', 'nucleo_empresa', ['id']);
+    const b = SyncStateStore.streamId('Empresa_CONTPAQi', 'otra_tabla', ['id']);
+    expect(a).not.toBe(b);
+  });
+
   it('detecta nuevo, sin cambio y actualización por destino', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcaas-state-'));
     const store = new SyncStateStore(dir);

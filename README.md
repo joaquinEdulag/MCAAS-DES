@@ -12,9 +12,9 @@ Para actualizar una instalación v1.0.x, consulte también `MIGRATION_v1.1.md`.
 - Múltiples extracciones `EXTRACT_1`, `EXTRACT_2`, ... definidas en `.env`.
 - Cada extracción posee su propia conexión de origen, script SQL y nombre lógico.
 - Varias extracciones pueden compartir una misma BD origen o apuntar a BDs diferentes.
-- El nombre lógico de la extracción se agrega automáticamente a cada fila destino en la columna configurada por `ORIGIN_FIELD_NAME`.
-- Identidad funcional por **origen + clave del sistema origen**, evitando colisiones entre IDs repetidos de distintas sucursales/bases.
-- La tabla destino puede conservar una PK autoincremental propia (`DESTINATION_AUTO_ID_COLUMN`) que MCAAS no escribe ni actualiza.
+- Opcionalmente, el nombre lógico de la extracción se agrega a cada fila destino. `INCLUDE_SOURCE_NAME=false` lo deshabilita de forma explícita; con `true`, `ORIGIN_FIELD_NAME` define el nombre de la columna.
+- Identidad funcional por **claves del sistema origen** y, cuando `INCLUDE_SOURCE_NAME=true` y `ORIGIN_FIELD_NAME` está habilitado, también por **origen + claves**.
+- La tabla destino puede conservar una PK/ID generado por la propia BD (`DESTINATION_AUTO_ID_COLUMN`, por ejemplo AUTO_INCREMENT o UUID por default) que MCAAS no escribe ni actualiza.
 - Script de extracción reemplazable sin recompilar el proyecto.
 - Tabla destino y columnas clave definidas mediante comentarios de metadatos en cada script SQL.
 - De 1 a 10 destinos configurables mediante `.env`.
@@ -36,7 +36,7 @@ EXTRACT_1 -> BD/tabla/script A --+
 EXTRACT_2 -> BD/tabla/script B --+--> detectar cambios --> Destino 1 --> 300 ms
 EXTRACT_3 -> BD/tabla/script C --+                   \-> Destino 2 --> 300 ms
 ...                              |                   \-> ...
-                                 +--> agrega ORIGIN_FIELD_NAME=EXTRACT_N_NAME
+                                 +--> agrega ORIGIN_FIELD_NAME=EXTRACT_N_NAME solo si INCLUDE_SOURCE_NAME=true
 ```
 
 Cada trabajo se procesa de forma independiente. Si una extracción falla de forma transitoria, MCAAS registra el fallo y puede continuar con las demás mientras no se alcance el umbral de error persistente.
@@ -53,6 +53,7 @@ Empleados_Sucursal_Norte  empleado_id = 25
 Con:
 
 ```env
+INCLUDE_SOURCE_NAME=true
 ORIGIN_FIELD_NAME=source_name
 ```
 
@@ -63,7 +64,7 @@ source_name=Empleados_Matriz          + empleado_id=25
 source_name=Empleados_Sucursal_Norte  + empleado_id=25
 ```
 
-Estas son identidades distintas. El `id` autoincremental del destino no participa en la sincronización; queda bajo control de la base destino.
+Estas son identidades distintas. El `id` generado por la BD del destino no participa en la sincronización; queda bajo control de la base destino.
 
 ### Esquema recomendado para un destino normal
 
@@ -83,7 +84,7 @@ CREATE TABLE empleados (
 
 Para un destino `HISTORICO=true` no use una restricción `UNIQUE(source_name, empleado_id)`, porque el objetivo es conservar varias versiones. Puede usar un índice normal en esas columnas.
 
-## Importante: no reutilizar el `id` autoincremental
+## Importante: no reutilizar el `id` generado por la BD
 
 Si la tabla destino usa:
 
@@ -112,10 +113,61 @@ DESTINATION_AUTO_ID_COLUMN=id
 
 MCAAS rechazará un `SELECT` que devuelva directamente una columna `id`, evitando que accidentalmente intente escribir la PK del destino.
 
+## Extracción actual: empresa CONTPAQi -> `nucleo_empresa`
+
+El proyecto incluye `scripts/extraction-empresa-contpaqi.sql`, preparado para una inyección directa desde `dbo.NOM10000` hacia la estructura actual de `nucleo_empresa`.
+
+El mapeo utilizado es:
+
+| CONTPAQi | `nucleo_empresa` | Tratamiento |
+| --- | --- | --- |
+| `GUIDEmpresa` | `id` | Se normaliza quitando llaves `{}` si existen; debe quedar en 36 caracteres. Es la clave de sincronización. |
+| `CodigoERP` | `codigo` | Texto no vacío, máximo 50 caracteres. |
+| `NombreEmpresa` | `nombre` | Texto no vacío, máximo 200 caracteres. |
+| `NombreCorto` | `nombre_corto` | Máximo 100 caracteres. |
+| `NombreEmpresaFiscal` | `nombre_fiscal` | Máximo 200 caracteres. |
+| `RFC` + `FechaConstitucion` + `Homoclave` | `rfc` | Se reconstruye como `RFC + YYMMDD + Homoclave`; no se depende de `RFCCompletoERP`. |
+| `RepresentanteLegalERP` | `representante_legal` | Si está vacío, se arma con `NombreRepresentante + ApPaternoRepresentante + ApMaternoRepresentante`. |
+| `RegistroIMSS` | `registro_patronal_imss` | Máximo 50 caracteres. |
+| `RegistroInfonavit` | `registro_infonavit` | Máximo 50 caracteres. |
+| `RegistroFonacot` | `registro_fonacot` | Máximo 50 caracteres. |
+| `RegimenFiscal` | `regimen_fiscal` | Se conserva la clave fiscal como texto. |
+| `Direccion` | `direccion` | Máximo 500 caracteres. |
+| `Localidad` | `localidad` | Máximo 150 caracteres. |
+| `CodigoPostal` | `codigo_postal` | Se conserva como texto y se rellena a 5 dígitos cuando es numérico. |
+| `TelefonoPrincipalERP` / `Telefono1` / `Telefono2` / `Telefono3` | `telefono` | Usa el primero no vacío y distinto de `0`. |
+| `EstadoERP` | `estado` | `INACTIVO` se conserva; cualquier otro valor se normaliza a `ACTIVO`. |
+| `TimeStamp` | `actualizado_en` | Se convierte a `datetime2(3)` en SQL Server y se envía al `datetime(3)` de MySQL. |
+
+`creado_en` no se envía porque la tabla destino ya define `CURRENT_TIMESTAMP(3)`.
+
+La configuración incluida usa:
+
+```env
+EXTRACTION_COUNT=1
+INCLUDE_SOURCE_NAME=false
+ORIGIN_FIELD_NAME=source_name
+DESTINATION_AUTO_ID_COLUMN=
+
+EXTRACT_1_NAME=Empresa_CONTPAQi
+EXTRACT_1_SCRIPT=./scripts/extraction-empresa-contpaqi.sql
+EXTRACT_1_TARGET_TABLE=nucleo_empresa
+EXTRACT_1_SYNC_KEY_COLUMNS=id
+
+DESTINATION_COUNT=1
+DEST_1_DB_TYPE=mysql
+DEST_1_TARGET_TABLE=nucleo_empresa
+```
+
+`INCLUDE_SOURCE_NAME=false` fuerza este flujo directo a **no agregar `source_name`**, aunque `ORIGIN_FIELD_NAME=source_name` permanezca configurado. Para reactivar la identificación por origen en otro escenario, cambie `INCLUDE_SOURCE_NAME=true`.
+
+El flujo normal es **UPDATE por `id` (`GUIDEmpresa`) y, si no existe, INSERT**. `codigo` y `rfc` siguen respetando las restricciones `UNIQUE` del destino.
+
 ## Configuración de múltiples extracciones
 
 ```env
 EXTRACTION_COUNT=2
+INCLUDE_SOURCE_NAME=true
 ORIGIN_FIELD_NAME=source_name
 DESTINATION_AUTO_ID_COLUMN=id
 
@@ -169,13 +221,17 @@ Esto permite migrar de forma gradual. Para aprovechar la identificación por mú
 
 ## Inicio para desarrollo
 
+Con Node.js 22+ y Corepack disponible:
+
 ```bash
-npm install
+corepack enable
+corepack prepare pnpm@11.24.0 --activate
+pnpm install --frozen-lockfile
 copy .env.example .env
-npm run validate
-npm run check:connections
-npm run run:once
-npm run dev
+pnpm run validate
+pnpm run check:connections
+pnpm run run:once
+pnpm run dev
 ```
 
 En Linux/macOS use `cp` en lugar de `copy`.
@@ -183,16 +239,16 @@ En Linux/macOS use `cp` en lugar de `copy`.
 ## Pruebas
 
 ```bash
-npm run typecheck
-npm test
+pnpm run typecheck
+pnpm test
 ```
 
 ## Build Windows x64
 
 ```bash
-npm install
-npm run build:win
-npm run package:release
+pnpm install --frozen-lockfile
+pnpm run build:win
+pnpm run package:release
 ```
 
 Salida esperada:
@@ -210,7 +266,7 @@ El binario generado incluye el runtime de Node y puede ejecutarse en Windows sin
 Con Inno Setup 6 instalado en la máquina de compilación:
 
 ```bash
-npm run installer:win
+pnpm run installer:win
 ```
 
 ## Instalación rápida en servidor
