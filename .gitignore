@@ -6,3 +6,4 @@ logs/
 state/
 .env
 *.log
+certs/ca.pem
