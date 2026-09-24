@@ -20,7 +20,7 @@ describe('identidad por origen', () => {
   });
 
   it('protege la PK autoincremental del destino', () => {
-    expect(() => assertAutoIdNotProvided(['id', 'nombre'], 'id')).toThrow(/autoincremental/i);
+    expect(() => assertAutoIdNotProvided(['id', 'nombre'], 'id')).toThrow(/DESTINATION_AUTO_ID_COLUMN/i);
     expect(() => assertAutoIdNotProvided(['empleado_id', 'nombre'], 'id')).not.toThrow();
   });
 });
