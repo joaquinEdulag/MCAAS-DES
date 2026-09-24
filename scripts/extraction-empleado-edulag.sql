@@ -4,46 +4,53 @@
 
 -- ============================================================
 -- MCAAS-DES
--- EXTRACCION DE EMPLEADOS EDULAG
+-- EMPLEADOS EDULAG
 --
--- ORIGEN
---   Motor: SQL Server / CONTPAQi Nominas
---   BD:    ctNOM_Edulag_2021
---   Tabla: dbo.nom10001
+-- ORIGEN:
+--   SQL Server
+--   BD: ctNOM_Edulag_2021
 --
--- DESTINO
---   Motor: MySQL / Aiven
---   BD:    edulag_erp_dev
+-- TABLAS:
+--   dbo.nom10001 = Empleados
+--   dbo.nom10003 = Departamentos
+--   dbo.nom10006 = Puestos
+--
+-- DESTINO:
+--   MySQL / Aiven
+--   BD: edulag_erp_dev
 --   Tabla: rh_empleado
 --
--- IDENTIDAD FUNCIONAL MCAAS
---
+-- IDENTIDAD MCAAS:
 --   source_name + numero_empleado
 --
--- Ejemplo:
+-- ID DE AIVEN:
+--   No se envia.
+--   rh_empleado.id es AUTO_INCREMENT.
 --
---   EDULAG      + 25
---   DEOMEDIC    + 25
---   CORPORATIVO + 25
+-- MAPEO ESTRUCTURA CONTAPAQI:
 --
--- son empleados diferentes.
+--   nom10001.iddepartamento
+--          -> nom10003.iddepartamento
+--          -> nom10003.descripcion
+--          -> rh_empleado.area_contpaqi
 --
--- IMPORTANTE:
+--   nom10001.idpuesto
+--          -> nom10006.idpuesto
+--          -> nom10006.descripcion
+--          -> rh_empleado.puesto_contpaqi
 --
--- - NO se envia id.
--- - NO se envia empresa_id.
--- - NO se envia area_id.
--- - NO se envia puesto_id.
--- - NO se envia fecha_baja.
--- - NO se envia motivo_baja.
--- - NO se envia transporte.
--- - NO se envia vales.
---
--- Esas columnas quedan bajo control de Aiven/RRHH.
+-- NO se modifican:
+--   empresa_id
+--   area_id
+--   puesto_id
+--   fecha_baja
+--   motivo_baja
+--   transporte
+--   vales
 --
 -- Compatible con SQL Server antiguo:
--- - No usa TRY_CONVERT
--- - No usa CONCAT
+--   No utiliza TRY_CONVERT
+--   No utiliza CONCAT
 -- ============================================================
 
 
@@ -51,27 +58,25 @@
     SELECT
 
         -- ----------------------------------------------------
-        -- IDENTIFICADOR INTERNO CONTAPAQI
-        --
-        -- Solo sirve para resolver posibles duplicados.
+        -- CONTROL INTERNO CONTAPAQI
         -- No se envia a Aiven.
         -- ----------------------------------------------------
-        idempleado AS id_empleado_contpaqi,
+        e.idempleado AS id_empleado_contpaqi,
 
 
         -- ----------------------------------------------------
-        -- EMPRESA DE PROCEDENCIA
+        -- ORIGEN
         -- ----------------------------------------------------
         CAST('EDULAG' AS varchar(150)) AS source_name,
 
 
         -- ----------------------------------------------------
-        -- NUMERO DE EMPLEADO
+        -- NUMERO EMPLEADO
         -- ----------------------------------------------------
         NULLIF(
             LTRIM(
                 RTRIM(
-                    CONVERT(varchar(50), codigoempleado)
+                    CONVERT(varchar(50), e.codigoempleado)
                 )
             ),
             ''
@@ -79,13 +84,13 @@
 
 
         -- ----------------------------------------------------
-        -- NOMBRE COMPLETO
+        -- NOMBRE
         -- ----------------------------------------------------
         LEFT(
             NULLIF(
                 LTRIM(
                     RTRIM(
-                        CONVERT(varchar(250), nombrelargo)
+                        CONVERT(varchar(250), e.nombrelargo)
                     )
                 ),
                 ''
@@ -94,14 +99,54 @@
         ) AS nombre_completo,
 
 
+        -- ====================================================
+        -- AREA CONTAPAQI
+        --
+        -- nom10001.iddepartamento
+        --       ->
+        -- nom10003.descripcion
+        -- ====================================================
+        LEFT(
+            NULLIF(
+                LTRIM(
+                    RTRIM(
+                        CONVERT(varchar(200), d.descripcion)
+                    )
+                ),
+                ''
+            ),
+            200
+        ) AS area_contpaqi,
+
+
+        -- ====================================================
+        -- PUESTO CONTAPAQI
+        --
+        -- nom10001.idpuesto
+        --       ->
+        -- nom10006.descripcion
+        -- ====================================================
+        LEFT(
+            NULLIF(
+                LTRIM(
+                    RTRIM(
+                        CONVERT(varchar(200), p.descripcion)
+                    )
+                ),
+                ''
+            ),
+            200
+        ) AS puesto_contpaqi,
+
+
         -- ----------------------------------------------------
-        -- CORREO ELECTRONICO
+        -- CORREO
         -- ----------------------------------------------------
         LEFT(
             NULLIF(
                 LTRIM(
                     RTRIM(
-                        CONVERT(varchar(254), CorreoElectronico)
+                        CONVERT(varchar(254), e.CorreoElectronico)
                     )
                 ),
                 ''
@@ -112,24 +157,22 @@
 
         -- ----------------------------------------------------
         -- COMPONENTES CURP
-        --
-        -- curpi + fecha nacimiento YYMMDD + curpf
         -- ----------------------------------------------------
         NULLIF(
             LTRIM(
                 RTRIM(
-                    CONVERT(varchar(30), curpi)
+                    CONVERT(varchar(30), e.curpi)
                 )
             ),
             ''
         ) AS curp_inicio,
 
-        fechanacimiento AS fecha_nacimiento_origen,
+        e.fechanacimiento AS fecha_nacimiento_origen,
 
         NULLIF(
             LTRIM(
                 RTRIM(
-                    CONVERT(varchar(30), curpf)
+                    CONVERT(varchar(30), e.curpf)
                 )
             ),
             ''
@@ -138,13 +181,11 @@
 
         -- ----------------------------------------------------
         -- COMPONENTES RFC
-        --
-        -- rfc + fecha nacimiento YYMMDD + homoclave
         -- ----------------------------------------------------
         NULLIF(
             LTRIM(
                 RTRIM(
-                    CONVERT(varchar(30), rfc)
+                    CONVERT(varchar(30), e.rfc)
                 )
             ),
             ''
@@ -153,7 +194,7 @@
         NULLIF(
             LTRIM(
                 RTRIM(
-                    CONVERT(varchar(20), homoclave)
+                    CONVERT(varchar(20), e.homoclave)
                 )
             ),
             ''
@@ -167,7 +208,7 @@
             NULLIF(
                 LTRIM(
                     RTRIM(
-                        CONVERT(varchar(50), NumeroFonacot)
+                        CONVERT(varchar(50), e.NumeroFonacot)
                     )
                 ),
                 ''
@@ -183,7 +224,7 @@
             NULLIF(
                 LTRIM(
                     RTRIM(
-                        CONVERT(varchar(50), estadocivil)
+                        CONVERT(varchar(50), e.estadocivil)
                     )
                 ),
                 ''
@@ -193,13 +234,13 @@
 
 
         -- ----------------------------------------------------
-        -- LUGAR DE NACIMIENTO
+        -- LUGAR NACIMIENTO
         -- ----------------------------------------------------
         LEFT(
             NULLIF(
                 LTRIM(
                     RTRIM(
-                        CONVERT(varchar(150), lugarnacimiento)
+                        CONVERT(varchar(150), e.lugarnacimiento)
                     )
                 ),
                 ''
@@ -209,28 +250,28 @@
 
 
         -- ----------------------------------------------------
-        -- ESTATUS LABORAL CONTAPAQI
+        -- ESTATUS LABORAL
         -- ----------------------------------------------------
         UPPER(
             NULLIF(
                 LTRIM(
                     RTRIM(
-                        CONVERT(varchar(50), estadoempleado)
+                        CONVERT(varchar(50), e.estadoempleado)
                     )
                 ),
                 ''
             )
-        ) AS estado_empleado_codigo,
+        ) AS estatus_laboral,
 
 
         -- ----------------------------------------------------
         -- FECHAS
         -- ----------------------------------------------------
-        fechaalta AS fecha_alta,
+        e.fechaalta AS fecha_alta,
 
-        fechabaja AS fecha_baja_contpaqi,
+        e.fechabaja AS fecha_baja_contpaqi,
 
-        fechareingreso AS fecha_reingreso,
+        e.fechareingreso AS fecha_reingreso,
 
 
         -- ----------------------------------------------------
@@ -240,7 +281,7 @@
             NULLIF(
                 LTRIM(
                     RTRIM(
-                        CONVERT(varchar(255), causabaja)
+                        CONVERT(varchar(255), e.causabaja)
                     )
                 ),
                 ''
@@ -250,38 +291,49 @@
 
 
         -- ----------------------------------------------------
-        -- SALARIO DIARIO
+        -- SALARIO
         -- ----------------------------------------------------
         CAST(
-            sueldodiario
+            e.sueldodiario
             AS decimal(12, 2)
         ) AS salario_diario,
 
 
         -- ----------------------------------------------------
-        -- CONTROL INTERNO DE ACTUALIZACION
-        --
-        -- No se envia a Aiven.
+        -- CONTROL DE ACTUALIZACION
+        -- No se envia.
         -- ----------------------------------------------------
-        [timestamp] AS actualizado_en_origen
+        e.[timestamp] AS actualizado_en_origen
 
-    FROM [ctNOM_Edulag_2021].[dbo].[nom10001]
+
+    FROM [ctNOM_Edulag_2021].[dbo].[nom10001] AS e
+
+
+    -- ========================================================
+    -- DEPARTAMENTOS
+    -- ========================================================
+    LEFT JOIN [ctNOM_Edulag_2021].[dbo].[nom10003] AS d
+        ON d.iddepartamento = e.iddepartamento
+
+
+    -- ========================================================
+    -- PUESTOS
+    -- ========================================================
+    LEFT JOIN [ctNOM_Edulag_2021].[dbo].[nom10006] AS p
+        ON p.idpuesto = e.idpuesto
 ),
 
 
 -- ============================================================
--- DEDUPLICACION
+-- DEDUPLICACION EMPLEADOS
 --
--- Dentro de EDULAG:
+-- Una fila por:
 --
---   source_name + numero_empleado
+--   EDULAG + numero_empleado
 --
--- debe aparecer una sola vez.
---
--- Si CONTPAQi contiene varias filas con el mismo numero:
---
--- 1. gana el registro mas reciente por timestamp;
--- 2. si empatan, gana idempleado mayor.
+-- Si existieran varias:
+--   timestamp mas reciente
+--   y después idempleado mayor.
 -- ============================================================
 clasificada AS (
     SELECT
@@ -309,7 +361,7 @@ clasificada AS (
 
 
 -- ============================================================
--- UNA SOLA FILA ACTUAL POR EMPLEADO
+-- UNA FILA ACTUAL POR EMPLEADO
 -- ============================================================
 origen AS (
     SELECT
@@ -317,6 +369,10 @@ origen AS (
 
         numero_empleado,
         nombre_completo,
+
+        area_contpaqi,
+        puesto_contpaqi,
+
         correo_electronico,
 
         curp_inicio,
@@ -331,7 +387,7 @@ origen AS (
         estado_civil,
         lugar_nacimiento,
 
-        estado_empleado_codigo,
+        estatus_laboral,
 
         fecha_alta,
         fecha_baja_contpaqi,
@@ -348,27 +404,24 @@ origen AS (
 
 
 -- ============================================================
--- MAPEO FINAL HACIA edulag_erp_dev.rh_empleado
+-- MAPEO FINAL A AIVEN
 -- ============================================================
 mapeada AS (
     SELECT
 
-        -- ----------------------------------------------------
-        -- EMPRESA / FUENTE
-        -- ----------------------------------------------------
         source_name,
 
-
-        -- ----------------------------------------------------
-        -- NUMERO EMPLEADO
-        -- ----------------------------------------------------
         numero_empleado,
 
+        nombre_completo,
+
 
         -- ----------------------------------------------------
-        -- NOMBRE
+        -- AREA / PUESTO CONTAPAQI
         -- ----------------------------------------------------
-        nombre_completo,
+        area_contpaqi,
+
+        puesto_contpaqi,
 
 
         -- ----------------------------------------------------
@@ -379,8 +432,6 @@ mapeada AS (
 
         -- ----------------------------------------------------
         -- CURP
-        --
-        -- curpi + YYMMDD + curpf
         -- ----------------------------------------------------
         CASE
             WHEN curp_inicio IS NOT NULL
@@ -406,8 +457,6 @@ mapeada AS (
 
         -- ----------------------------------------------------
         -- RFC
-        --
-        -- rfc + YYMMDD + homoclave
         -- ----------------------------------------------------
         CASE
             WHEN rfc_inicio IS NOT NULL
@@ -431,109 +480,22 @@ mapeada AS (
         END AS rfc,
 
 
-        -- ----------------------------------------------------
-        -- FONACOT
-        -- ----------------------------------------------------
         numero_fonacot,
 
-
-        -- ----------------------------------------------------
-        -- ESTADO CIVIL
-        -- ----------------------------------------------------
         estado_civil,
 
-
-        -- ----------------------------------------------------
-        -- LUGAR DE NACIMIENTO
-        -- ----------------------------------------------------
         lugar_nacimiento,
 
+        estatus_laboral,
 
-        -- ----------------------------------------------------
-        -- ESTATUS LABORAL
-        --
-        -- Se conserva el codigo/valor proporcionado
-        -- directamente por CONTPAQi.
-        -- ----------------------------------------------------
-        estado_empleado_codigo AS estatus_laboral,
-
-
-        -- ----------------------------------------------------
-        -- FECHA ALTA
-        -- ----------------------------------------------------
         fecha_alta,
 
-
-        -- ----------------------------------------------------
-        -- FECHA BAJA CONTAPAQI
-        --
-        -- NO se utiliza fecha_baja porque esa columna
-        -- pertenece a RRHH.
-        -- ----------------------------------------------------
         fecha_baja_contpaqi,
 
-
-        -- ----------------------------------------------------
-        -- FECHA REINGRESO
-        -- ----------------------------------------------------
         fecha_reingreso,
 
-
-        -- ----------------------------------------------------
-        -- MOTIVO BAJA CONTAPAQI
-        --
-        -- NO se utiliza motivo_baja porque pertenece a RRHH.
-        -- ----------------------------------------------------
         motivo_baja_contpaqi,
 
-
-        -- ----------------------------------------------------
-        -- PERMANENCIA
-        --
-        -- Si existe fecha de baja:
-        --   fechaalta -> fechabaja
-        --
-        -- Si no existe:
-        --   fechaalta -> hoy
-        -- ----------------------------------------------------
-        CASE
-            WHEN fecha_alta IS NULL
-                THEN NULL
-
-            WHEN fecha_baja_contpaqi IS NOT NULL
-
-                THEN DATEDIFF(
-                    day,
-                    fecha_alta,
-                    fecha_baja_contpaqi
-                )
-
-            ELSE DATEDIFF(
-                day,
-                fecha_alta,
-                GETDATE()
-            )
-        END AS permanencia_dias,
-
-
-        -- ----------------------------------------------------
-        -- SEMANA DE BAJA
-        -- ----------------------------------------------------
-        CASE
-            WHEN fecha_baja_contpaqi IS NOT NULL
-
-                THEN DATEPART(
-                    week,
-                    fecha_baja_contpaqi
-                )
-
-            ELSE NULL
-        END AS semana_baja,
-
-
-        -- ----------------------------------------------------
-        -- SALARIO DIARIO
-        -- ----------------------------------------------------
         salario_diario
 
     FROM origen
@@ -543,58 +505,48 @@ mapeada AS (
 -- ============================================================
 -- RESULTADO FINAL
 --
--- COLUMNAS QUE MCAAS VA A INSERTAR / ACTUALIZAR:
+-- id NO se envia.
+-- Aiven lo genera mediante AUTO_INCREMENT.
 --
--- source_name
--- numero_empleado
--- nombre_completo
--- correo_electronico
--- curp
--- rfc
--- numero_fonacot
--- estado_civil
--- lugar_nacimiento
--- estatus_laboral
--- fecha_alta
--- fecha_baja_contpaqi
--- fecha_reingreso
--- motivo_baja_contpaqi
--- permanencia_dias
--- semana_baja
--- salario_diario
+-- area_id / puesto_id NO se modifican.
 --
--- NO se devuelve id.
--- NO se devuelve empresa_id.
--- NO se devuelve area_id.
--- NO se devuelve puesto_id.
--- NO se devuelve fecha_baja.
--- NO se devuelve motivo_baja.
--- NO se devuelve transporte.
--- NO se devuelve vales.
+-- Se actualizan:
+--   area_contpaqi
+--   puesto_contpaqi
+-- junto con los demás campos maestros de CONTPAQi.
 -- ============================================================
 SELECT
     source_name,
 
     numero_empleado,
+
     nombre_completo,
+
+    area_contpaqi,
+
+    puesto_contpaqi,
+
     correo_electronico,
 
     curp,
+
     rfc,
+
     numero_fonacot,
 
     estado_civil,
+
     lugar_nacimiento,
+
     estatus_laboral,
 
     fecha_alta,
+
     fecha_baja_contpaqi,
+
     fecha_reingreso,
 
     motivo_baja_contpaqi,
-
-    permanencia_dias,
-    semana_baja,
 
     salario_diario
 
