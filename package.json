@@ -15,7 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "bundle": "ncc build src/index.ts -o build --minify",
+    "bundle": "node -e \"require('fs').rmSync('build',{recursive:true,force:true})\" && ncc build src/index.ts -o build --minify",
     "build:win": "pnpm run typecheck && pnpm test && pnpm run bundle && node scripts/build-windows.mjs",
     "package:zip": "node scripts/package-project.mjs",
     "package:release": "node scripts/package-release.mjs",

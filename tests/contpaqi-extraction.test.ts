@@ -14,25 +14,78 @@ describe('extraccion directa de empresa CONTPAQi', () => {
     expect(script.sql).toMatch(/\bAS\s+id\b/i);
   });
 
-  it('mapea los campos equivalentes de NOM10000 a nucleo_empresa', () => {
+  it('mapea los campos reales de NOM10000 a nucleo_empresa', () => {
     const expectedSourceFields = [
-      'CodigoERP', 'NombreEmpresa', 'NombreCorto', 'NombreEmpresaFiscal',
-      'RFC', 'FechaConstitucion', 'Homoclave', 'RepresentanteLegalERP',
-      'NombreRepresentante', 'ApPaternoRepresentante', 'ApMaternoRepresentante',
-      'RegistroIMSS', 'RegistroInfonavit', 'RegistroFonacot', 'RegimenFiscal',
-      'Direccion', 'Localidad', 'CodigoPostal', 'TelefonoPrincipalERP',
-      'Telefono1', 'Telefono2', 'Telefono3', 'EstadoERP', 'TimeStamp',
+      'IDEmpresa',
+      'GUIDEmpresa',
+      'NombreEmpresa',
+      'NombreCorto',
+      'NombreEmpresaFiscal',
+      'RFC',
+      'FechaConstitucion',
+      'Homoclave',
+      'NombreRepresentante',
+      'ApPaternoRepresentante',
+      'ApMaternoRepresentante',
+      'RegistroIMSS',
+      'RegistroInfonavit',
+      'RegistroFonacot',
+      'RegimenFiscal',
+      'Direccion',
+      'Localidad',
+      'CodigoPostal',
+      'Telefono1',
+      'Telefono2',
+      'Telefono3',
+      'TimeStamp',
+      'FechaInicioHistoria',
     ];
-    for (const field of expectedSourceFields) expect(script.sql).toMatch(new RegExp(field, 'i'));
+
+    for (const field of expectedSourceFields) {
+      expect(script.sql).toMatch(new RegExp(field, 'i'));
+    }
+
+    const executableSql = script.sql
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n');
+
+    // Estos nombres pertenecían a una versión preliminar del mapeo y
+    // no existen en la estructura real de dbo.NOM10000.
+    for (const obsoleteField of [
+      'CodigoERP',
+      'RepresentanteLegalERP',
+      'TelefonoPrincipalERP',
+      'EstadoERP',
+    ]) {
+      expect(executableSql).not.toMatch(new RegExp(`\\b${obsoleteField}\\b`, 'i'));
+    }
 
     const expectedDestinationColumns = [
-      'id', 'codigo', 'nombre', 'nombre_corto', 'nombre_fiscal', 'rfc',
-      'representante_legal', 'registro_patronal_imss', 'registro_infonavit',
-      'registro_fonacot', 'regimen_fiscal', 'direccion', 'localidad',
-      'codigo_postal', 'telefono', 'estado', 'actualizado_en',
+      'id',
+      'codigo',
+      'nombre',
+      'nombre_corto',
+      'nombre_fiscal',
+      'rfc',
+      'representante_legal',
+      'registro_patronal_imss',
+      'registro_infonavit',
+      'registro_fonacot',
+      'regimen_fiscal',
+      'direccion',
+      'localidad',
+      'codigo_postal',
+      'telefono',
+      'estado',
+      'actualizado_en',
     ];
+
     const finalSelect = script.sql.split(/\nSELECT\s*\n/i).pop() || script.sql;
-    for (const column of expectedDestinationColumns) expect(finalSelect).toMatch(new RegExp(`\\b${column}\\b`, 'i'));
+    for (const column of expectedDestinationColumns) {
+      expect(finalSelect).toMatch(new RegExp(`\\b${column}\\b`, 'i'));
+    }
+
     expect(finalSelect).not.toMatch(/\bcreado_en\b/i);
     expect(finalSelect).not.toMatch(/\bsource_name\b/i);
   });
@@ -42,7 +95,12 @@ describe('extraccion directa de empresa CONTPAQi', () => {
     expect(script.sql).toMatch(/fecha_constitucion/i);
     expect(script.sql).toMatch(/rfc_homoclave/i);
     expect(script.sql).toMatch(/CONVERT\(char\(6\),\s*fecha_constitucion,\s*12\)/i);
-    const executableSql = script.sql.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n');
+
+    const executableSql = script.sql
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n');
+
     expect(executableSql).not.toMatch(/\bRFCCompletoERP\b/i);
   });
 

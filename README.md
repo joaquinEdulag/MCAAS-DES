@@ -281,3 +281,9 @@ pnpm run installer:win
 8. Inicie `MCAAS-DES Core` desde Task Scheduler.
 
 Consulte `docs/Manual_MCAAS_DES.pdf` para el procedimiento completo.
+
+## Gmail API en el ejecutable Windows
+
+El envío de alertas usa OAuth 2.0 directamente contra `https://oauth2.googleapis.com/token` y la API REST de Gmail mediante `fetch` nativo de Node.js 22. El runtime no depende de `googleapis`, evitando chunks dinámicos de NCC como `57.index.js` que no podían cargarse desde el ejecutable empaquetado.
+
+Las variables de configuración se mantienen sin cambios: `GMAIL_ENABLED`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `GMAIL_REDIRECT_URI`, `GMAIL_FROM` y `GMAIL_ALERT_TO`.
