@@ -39,8 +39,11 @@
 --          -> nom10006.descripcion
 --          -> rh_empleado.puesto_contpaqi
 --
+-- Se sincroniza tambien:
+--   empresa_id = GUIDEmpresa de dbo.NOM10000.
+--   Debe coincidir con nucleo_empresa.id cargado por extraction-empresa-contpaqi.sql.
+--
 -- NO se modifican:
---   empresa_id
 --   area_id
 --   puesto_id
 --   fecha_baja
@@ -54,7 +57,39 @@
 -- ============================================================
 
 
-;WITH base AS (
+;WITH empresa_actual AS (
+    SELECT TOP (1)
+        UPPER(
+            REPLACE(
+                REPLACE(
+                    LTRIM(RTRIM(CONVERT(varchar(40), GUIDEmpresa))),
+                    '{',
+                    ''
+                ),
+                '}',
+                ''
+            )
+        ) AS empresa_id
+    FROM [ctNOM_Edulag_2021].[dbo].[NOM10000]
+    WHERE LEN(
+        UPPER(
+            REPLACE(
+                REPLACE(
+                    LTRIM(RTRIM(CONVERT(varchar(40), GUIDEmpresa))),
+                    '{',
+                    ''
+                ),
+                '}',
+                ''
+            )
+        )
+    ) = 36
+    ORDER BY
+        CASE WHEN [TimeStamp] IS NULL THEN 1 ELSE 0 END,
+        [TimeStamp] DESC,
+        IDEmpresa DESC
+),
+base AS (
     SELECT
 
         -- ----------------------------------------------------
@@ -68,6 +103,13 @@
         -- ORIGEN
         -- ----------------------------------------------------
         CAST('EDULAG' AS varchar(150)) AS source_name,
+
+
+        -- ----------------------------------------------------
+        -- EMPRESA ERP
+        -- Mismo GUID utilizado por nucleo_empresa.id.
+        -- ----------------------------------------------------
+        empresa.empresa_id AS empresa_id,
 
 
         -- ----------------------------------------------------
@@ -321,6 +363,8 @@
     -- ========================================================
     LEFT JOIN [ctNOM_Edulag_2021].[dbo].[nom10006] AS p
         ON p.idpuesto = e.idpuesto
+
+    CROSS JOIN empresa_actual AS empresa
 ),
 
 
@@ -366,6 +410,7 @@ clasificada AS (
 origen AS (
     SELECT
         source_name,
+        empresa_id,
 
         numero_empleado,
         nombre_completo,
@@ -410,6 +455,7 @@ mapeada AS (
     SELECT
 
         source_name,
+        empresa_id,
 
         numero_empleado,
 
@@ -508,6 +554,7 @@ mapeada AS (
 -- id NO se envia.
 -- Aiven lo genera mediante AUTO_INCREMENT.
 --
+-- empresa_id se actualiza siempre con el GUID real de la empresa.
 -- area_id / puesto_id NO se modifican.
 --
 -- Se actualizan:
@@ -517,6 +564,7 @@ mapeada AS (
 -- ============================================================
 SELECT
     source_name,
+    empresa_id,
 
     numero_empleado,
 
@@ -553,5 +601,6 @@ SELECT
 FROM mapeada
 
 WHERE source_name IS NOT NULL
+  AND empresa_id IS NOT NULL
   AND numero_empleado IS NOT NULL
   AND nombre_completo IS NOT NULL;
