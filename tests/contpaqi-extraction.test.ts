@@ -112,3 +112,19 @@ describe('extraccion directa de empresa CONTPAQi', () => {
     expect(env).toMatch(/^EXTRACT_1_SYNC_KEY_COLUMNS=id$/m);
   });
 });
+
+
+describe('extraccion de empleados EDULAG', () => {
+  const scriptPath = path.resolve(process.cwd(), 'scripts', 'extraction-empleado-edulag.sql');
+  const script = parseExtractionScript(scriptPath);
+
+  it('conserva las fechas DATE como AAAA-MM-DD sin sumar dias', () => {
+    expect(script.targetTable).toBe('rh_empleado');
+    expect(script.keyColumns).toEqual(['source_name', 'numero_empleado']);
+    expect(script.sql).toMatch(/CONVERT\(char\(10\),\s*fecha_nacimiento_origen,\s*23\)\s+AS\s+fecha_nacimiento/i);
+    expect(script.sql).toMatch(/CONVERT\(char\(10\),\s*fecha_alta,\s*23\)\s+AS\s+fecha_alta/i);
+    expect(script.sql).toMatch(/CONVERT\(char\(10\),\s*fecha_baja_contpaqi,\s*23\)\s+AS\s+fecha_baja_contpaqi/i);
+    expect(script.sql).toMatch(/CONVERT\(char\(10\),\s*fecha_reingreso,\s*23\)\s+AS\s+fecha_reingreso/i);
+    expect(script.sql).not.toMatch(/DATEADD\s*\(\s*day\s*,\s*1/i);
+  });
+});

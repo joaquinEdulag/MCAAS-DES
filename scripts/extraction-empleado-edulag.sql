@@ -502,7 +502,9 @@ mapeada AS (
         -- FECHA DE NACIMIENTO
         -- Fuente maestra: CONTPAQI
         -- ----------------------------------------------------
-        fecha_nacimiento_origen AS fecha_nacimiento,
+        -- Se envia como texto AAAA-MM-DD para conservar la fecha de calendario.
+        -- No se suma +1: se evita que Node convierta un DATE a otra zona horaria.
+        CONVERT(char(10), fecha_nacimiento_origen, 23) AS fecha_nacimiento,
 
         -- ----------------------------------------------------
         -- CURP
@@ -562,11 +564,13 @@ mapeada AS (
 
         estatus_laboral,
 
-        fecha_alta,
+        -- Las columnas destino son DATE. Se envian como AAAA-MM-DD para que
+        -- el puente no las transforme mediante objetos Date/UTC de JavaScript.
+        CONVERT(char(10), fecha_alta, 23) AS fecha_alta,
 
-        fecha_baja_contpaqi,
+        CONVERT(char(10), fecha_baja_contpaqi, 23) AS fecha_baja_contpaqi,
 
-        fecha_reingreso,
+        CONVERT(char(10), fecha_reingreso, 23) AS fecha_reingreso,
 
         motivo_baja_contpaqi,
 
