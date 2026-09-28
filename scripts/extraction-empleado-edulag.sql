@@ -196,6 +196,20 @@ base AS (
             254
         ) AS correo_electronico,
 
+        -- ----------------------------------------------------
+        -- GENERO / SEXO CONTAPAQI
+        -- ----------------------------------------------------
+        LEFT(
+            NULLIF(
+                LTRIM(
+                    RTRIM(
+                        CONVERT(varchar(20), e.sexo)
+                    )
+                ),
+                ''
+            ),
+            20
+        ) AS genero_origen,
 
         -- ----------------------------------------------------
         -- COMPONENTES CURP
@@ -420,8 +434,10 @@ origen AS (
 
         correo_electronico,
 
-        curp_inicio,
+        genero_origen,
         fecha_nacimiento_origen,
+
+        curp_inicio,
         curp_final,
 
         rfc_inicio,
@@ -475,6 +491,18 @@ mapeada AS (
         -- ----------------------------------------------------
         correo_electronico,
 
+        -- ----------------------------------------------------
+        -- GENERO
+        -- Fuente maestra: CONTPAQI
+        -- ----------------------------------------------------
+        genero_origen AS genero,
+
+
+        -- ----------------------------------------------------
+        -- FECHA DE NACIMIENTO
+        -- Fuente maestra: CONTPAQI
+        -- ----------------------------------------------------
+        fecha_nacimiento_origen AS fecha_nacimiento,
 
         -- ----------------------------------------------------
         -- CURP
@@ -575,6 +603,10 @@ SELECT
     puesto_contpaqi,
 
     correo_electronico,
+
+    genero,
+
+    fecha_nacimiento,
 
     curp,
 
