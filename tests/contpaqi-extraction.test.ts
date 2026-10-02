@@ -128,3 +128,39 @@ describe('extraccion de empleados EDULAG', () => {
     expect(script.sql).not.toMatch(/DATEADD\s*\(\s*day\s*,\s*1/i);
   });
 });
+
+describe('extracciones de empleados multiempresa CONTPAQi', () => {
+  const cases = [
+    {
+      file: 'extraction-empleado-tequilera.sql',
+      sourceName: 'TEQUILERA_CASA_ALAMOS',
+      database: 'ctNOM_TEQUILERA_CASA',
+      guid: 'D1EEE7F0-ED97-4339-ABF3-BAC4BC260F18',
+    },
+    {
+      file: 'extraction-empleado-pentagono.sql',
+      sourceName: 'PENTAGONO_AGRICOLA',
+      database: 'ctPentagono_Agric',
+      guid: 'E0DA7FED-2B95-41F1-B81D-54260A680800',
+    },
+  ];
+
+  for (const item of cases) {
+    it(`${item.file} conserva la misma tabla/clave y protege el GUID de empresa`, () => {
+      const scriptPath = path.resolve(process.cwd(), 'scripts', item.file);
+      const script = parseExtractionScript(scriptPath);
+
+      expect(script.targetTable).toBe('rh_empleado');
+      expect(script.keyColumns).toEqual(['source_name', 'numero_empleado']);
+      expect(script.sql).toContain(item.database);
+      expect(script.sql).toContain(item.sourceName);
+      expect(script.sql).toContain(item.guid);
+      expect(script.sql).toMatch(/empresa_id/i);
+      expect(script.sql).toMatch(/area_contpaqi/i);
+      expect(script.sql).toMatch(/puesto_contpaqi/i);
+      expect(script.sql).toMatch(/correo_electronico/i);
+      expect(script.sql).not.toMatch(/DATEADD\s*\(\s*day\s*,\s*1/i);
+    });
+  }
+});
+
