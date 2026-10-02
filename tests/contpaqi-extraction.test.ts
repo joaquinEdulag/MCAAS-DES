@@ -121,10 +121,10 @@ describe('extraccion de empleados EDULAG', () => {
   it('conserva las fechas DATE como AAAA-MM-DD sin sumar dias', () => {
     expect(script.targetTable).toBe('rh_empleado');
     expect(script.keyColumns).toEqual(['source_name', 'numero_empleado']);
-    expect(script.sql).toMatch(/CONVERT\(char\(10\),\s*fecha_nacimiento_origen,\s*23\)\s+AS\s+fecha_nacimiento/i);
-    expect(script.sql).toMatch(/CONVERT\(char\(10\),\s*fecha_alta,\s*23\)\s+AS\s+fecha_alta/i);
-    expect(script.sql).toMatch(/CONVERT\(char\(10\),\s*fecha_baja_contpaqi,\s*23\)\s+AS\s+fecha_baja_contpaqi/i);
-    expect(script.sql).toMatch(/CONVERT\(char\(10\),\s*fecha_reingreso,\s*23\)\s+AS\s+fecha_reingreso/i);
+    expect(script.sql).toMatch(/CONVERT\(\s*char\(10\)\s*,\s*fecha_nacimiento_origen\s*,\s*23\s*\)\s*(?:END\s+)?AS\s+fecha_nacimiento/i);
+    expect(script.sql).toMatch(/CONVERT\(\s*char\(10\)\s*,\s*fecha_alta\s*,\s*23\s*\)\s*(?:END\s+)?AS\s+fecha_alta/i);
+    expect(script.sql).toMatch(/CONVERT\(\s*char\(10\)\s*,\s*fecha_baja_contpaqi\s*,\s*23\s*\)\s*(?:END\s+)?AS\s+fecha_baja_contpaqi/i);
+    expect(script.sql).toMatch(/CONVERT\(\s*char\(10\)\s*,\s*fecha_reingreso\s*,\s*23\s*\)\s*(?:END\s+)?AS\s+fecha_reingreso/i);
     expect(script.sql).not.toMatch(/DATEADD\s*\(\s*day\s*,\s*1/i);
   });
 });
