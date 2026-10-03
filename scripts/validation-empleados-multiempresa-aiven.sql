@@ -10,8 +10,8 @@ SELECT
     e.empresa_id,
     n.nombre AS empresa,
     COUNT(*) AS total_empleados
-FROM rh_empleado AS e
-LEFT JOIN nucleo_empresa AS n
+FROM erp_rh_empleado AS e
+LEFT JOIN erp_nucleo_empresa AS n
     ON n.id = e.empresa_id
 WHERE e.source_name IN (
     'EDULAG',
@@ -38,7 +38,7 @@ SELECT
              AND empresa_id = 'E0DA7FED-2B95-41F1-B81D-54260A680800' THEN 'OK'
         ELSE 'REVISAR'
     END AS validacion_guid
-FROM rh_empleado
+FROM erp_rh_empleado
 WHERE source_name IN (
     'EDULAG',
     'TEQUILERA_CASA_ALAMOS',
@@ -51,7 +51,7 @@ ORDER BY source_name, empresa_id;
 SELECT
     source_name,
     COUNT(*) AS empleados_sin_empresa
-FROM rh_empleado
+FROM erp_rh_empleado
 WHERE source_name IN (
     'EDULAG',
     'TEQUILERA_CASA_ALAMOS',
@@ -68,7 +68,7 @@ SELECT
     TRIM(numero_empleado) AS numero_empleado,
     COUNT(*) AS cantidad,
     GROUP_CONCAT(DISTINCT source_name ORDER BY source_name SEPARATOR ' | ') AS origenes
-FROM rh_empleado
+FROM erp_rh_empleado
 WHERE source_name IN (
     'EDULAG',
     'TEQUILERA_CASA_ALAMOS',

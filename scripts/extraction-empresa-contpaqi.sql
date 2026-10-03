@@ -1,10 +1,10 @@
 -- MCAAS_NAME=Empresa_CONTPAQi_Directa
--- MCAAS_TARGET_TABLE=nucleo_empresa
+-- MCAAS_TARGET_TABLE=erp_nucleo_empresa
 -- MCAAS_KEY_COLUMNS=id
 
 -- ============================================================
 -- MCAAS-DES
--- Extraccion: CONTPAQi Nominas -> nucleo_empresa
+-- Extraccion: CONTPAQi Nominas -> erp_nucleo_empresa
 -- Origen: dbo.NOM10000
 --
 -- La identidad funcional es GUIDEmpresa -> id.
@@ -353,7 +353,7 @@ origen AS (
 ),
 
 -- ============================================================
--- MAPEO FINAL A nucleo_empresa
+-- MAPEO FINAL A erp_nucleo_empresa
 -- ============================================================
 mapeada AS (
     SELECT
@@ -450,7 +450,7 @@ mapeada AS (
         ) AS telefono,
 
         -- NOM10000 no contiene un campo equivalente al
-        -- estado funcional de nucleo_empresa.
+        -- estado funcional de erp_nucleo_empresa.
         CAST('ACTIVO' AS varchar(8)) AS estado,
 
         -- ----------------------------------------------------

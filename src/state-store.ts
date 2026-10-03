@@ -46,6 +46,20 @@ export class SyncStateStore {
     atomicWriteJson(this.filePath, this.state);
   }
 
+  migrateStream(fromStreamId: string, toStreamId: string): boolean {
+    if (fromStreamId === toStreamId) return false;
+    const source = this.state.streams[fromStreamId];
+    if (!source) return false;
+
+    const target = this.state.streams[toStreamId] ||= { destinations: {} };
+    for (const [destinationId, destinationState] of Object.entries(source.destinations)) {
+      target.destinations[destinationId] ||= destinationState;
+    }
+    delete this.state.streams[fromStreamId];
+    atomicWriteJson(this.filePath, this.state);
+    return true;
+  }
+
   summary(): Record<string, unknown> {
     const streams = Object.entries(this.state.streams).map(([streamId, stream]) => ({
       streamId,

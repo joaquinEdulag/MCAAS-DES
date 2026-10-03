@@ -8,6 +8,7 @@ import { FailureTracker } from './failure-tracker.js';
 import { Logger } from './logger.js';
 import { sendPersistentErrorEmail } from './gmail.js';
 import { sanitizeError, sleep } from './utils.js';
+import { legacyTargetTableName, normalizeTargetTableName } from './table-names.js';
 
 interface SourceRuntime {
   config: ExtractionConfig;
@@ -125,11 +126,28 @@ export class SyncEngine {
     for (const { config: destination, adapter } of this.destinations) {
       if (this.failures.isPersistent()) break;
       try {
-        const targetTable = destination.targetTableOverride || script.targetTable;
+        const requestedTargetTable = destination.targetTableOverride || script.targetTable;
+        const targetTable = normalizeTargetTableName(requestedTargetTable);
+        if (targetTable !== requestedTargetTable.trim()) {
+          this.logger.warn(
+            `${originName} -> ${destination.name}: la tabla legacy ${requestedTargetTable} fue normalizada a ${targetTable}. ` +
+            'Actualice su .env cuando sea posible; MCAAS mantiene este alias por compatibilidad.',
+          );
+        }
+
         // El estado debe depender de la tabla REAL de destino. De lo contrario,
         // cambiar DEST_N_TARGET_TABLE podria reutilizar huellas de otra tabla y
         // omitir escrituras que aun no existen en el nuevo destino.
         const streamId = SyncStateStore.streamId(originName, targetTable, destinationKeys);
+        const legacyTargetTable = legacyTargetTableName(targetTable);
+        if (legacyTargetTable) {
+          const legacyStreamId = SyncStateStore.streamId(originName, legacyTargetTable, destinationKeys);
+          if (this.state.migrateStream(legacyStreamId, streamId)) {
+            this.logger.info(
+              `${originName} -> ${destination.name}: estado de sincronizacion migrado de ${legacyTargetTable} a ${targetTable}.`,
+            );
+          }
+        }
         const changes = this.state.classify(streamId, destination.id, rows, destinationKeys);
         totalChanges += changes.length;
         if (!changes.length) continue;

@@ -1,5 +1,5 @@
 -- MCAAS_NAME=Empleado_PENTAGONO_AGRICOLA
--- MCAAS_TARGET_TABLE=rh_empleado
+-- MCAAS_TARGET_TABLE=erp_rh_empleado
 -- MCAAS_KEY_COLUMNS=source_name,numero_empleado
 
 -- ============================================================
@@ -18,14 +18,14 @@
 -- DESTINO:
 --   MySQL / Aiven
 --   BD: edulag_erp_dev
---   Tabla: rh_empleado
+--   Tabla: erp_rh_empleado
 --
 -- IDENTIDAD MCAAS:
 --   source_name + numero_empleado
 --
 -- ID AIVEN:
 --   No se envia.
---   rh_empleado.id es AUTO_INCREMENT.
+--   erp_rh_empleado.id es AUTO_INCREMENT.
 --
 -- EMPRESA:
 --   Los empleados de esta extracción pertenecen exclusivamente
@@ -34,7 +34,7 @@
 --   empresa_id:
 --   E0DA7FED-2B95-41F1-B81D-54260A680800
 --
---   Este valor corresponde a nucleo_empresa.id.
+--   Este valor corresponde a erp_nucleo_empresa.id.
 --
 -- IMPORTANTE:
 --   No se consulta NOM10000 desde esta extracción.
@@ -46,12 +46,12 @@
 --   nom10001.iddepartamento
 --       -> nom10003.iddepartamento
 --       -> nom10003.descripcion
---       -> rh_empleado.area_contpaqi
+--       -> erp_rh_empleado.area_contpaqi
 --
 --   nom10001.idpuesto
 --       -> nom10006.idpuesto
 --       -> nom10006.descripcion
---       -> rh_empleado.puesto_contpaqi
+--       -> erp_rh_empleado.puesto_contpaqi
 --
 -- NO SE MODIFICAN:
 --   area_id
@@ -88,7 +88,7 @@
         -- EMPRESA
         --
         -- GUID definitivo de Pentagono Agricola.
-        -- Coincide con nucleo_empresa.id.
+        -- Coincide con erp_nucleo_empresa.id.
         --
         -- Se coloca directamente porque esta extracción
         -- pertenece exclusivamente a PENTAGONO AGRICOLA.
@@ -719,7 +719,7 @@ mapeada AS (
 --   transporte
 --   vales
 --
--- rh_empleado.id:
+-- erp_rh_empleado.id:
 --   generado por AUTO_INCREMENT.
 --
 -- Identidad MCAAS:

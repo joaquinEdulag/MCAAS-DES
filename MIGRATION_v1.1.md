@@ -81,7 +81,7 @@ La restricción `UNIQUE` anterior es recomendada para destinos normales. No la u
 Si no define `EXTRACTION_COUNT`, la configuración antigua `SOURCE_DB_* + EXTRACTION_SCRIPT` sigue funcionando como modo legacy. Si tampoco define `ORIGIN_FIELD_NAME`, MCAAS no agrega una columna nueva y conserva la identidad de v1.0.x.
 
 
-## Extracción de empresa hacia `nucleo_empresa`
+## Extracción de empresa hacia `erp_nucleo_empresa`
 
 Para la extracción directa incluida en esta entrega, use:
 
@@ -92,9 +92,9 @@ ORIGIN_FIELD_NAME=source_name
 DESTINATION_AUTO_ID_COLUMN=
 EXTRACT_1_NAME=Empresa_CONTPAQi
 EXTRACT_1_SCRIPT=./scripts/extraction-empresa-contpaqi.sql
-EXTRACT_1_TARGET_TABLE=nucleo_empresa
+EXTRACT_1_TARGET_TABLE=erp_nucleo_empresa
 EXTRACT_1_SYNC_KEY_COLUMNS=id
-DEST_1_TARGET_TABLE=nucleo_empresa
+DEST_1_TARGET_TABLE=erp_nucleo_empresa
 ```
 
 `INCLUDE_SOURCE_NAME=false` deshabilita explícitamente la inyección de la columna `source_name` para este flujo, sin eliminar la capacidad multi-origen del motor.
@@ -113,4 +113,4 @@ pnpm run check:connections
 pnpm run run:once
 ```
 
-Si habilita `ORIGIN_FIELD_NAME`, pruebe expresamente dos orígenes con el mismo ID de negocio y confirme que el destino contiene dos filas con valores distintos en la columna de origen. Para el flujo `nucleo_empresa` incluido aquí, `INCLUDE_SOURCE_NAME=false` deshabilita la columna de origen y la identidad se basa únicamente en `id` (`GUIDEmpresa`).
+Si habilita `ORIGIN_FIELD_NAME`, pruebe expresamente dos orígenes con el mismo ID de negocio y confirme que el destino contiene dos filas con valores distintos en la columna de origen. Para el flujo `erp_nucleo_empresa` incluido aquí, `INCLUDE_SOURCE_NAME=false` deshabilita la columna de origen y la identidad se basa únicamente en `id` (`GUIDEmpresa`).

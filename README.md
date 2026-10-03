@@ -5,6 +5,7 @@
 MCAAS - DES es un servicio de sincronización de datos orientado a Windows. Desde la versión **1.1.0** puede ejecutar múltiples trabajos de extracción: cada trabajo puede consultar una tabla distinta, usar un script SQL distinto e incluso conectarse a una base de datos origen diferente. Todos los cambios detectados se distribuyen a todos los destinos configurados.
 
 Para actualizar una instalación v1.0.x, consulte también `MIGRATION_v1.1.md`.
+Para la nomenclatura fisica actual del ERP (`erp_*`, `casl_*`, `entra_*`), consulte `MIGRATION_ERP_TABLE_NAMES.md`. MCAAS normaliza temporalmente nombres legacy conocidos y migra el estado local del stream para evitar una resincronizacion causada unicamente por el rename de tablas.
 
 ## Capacidades principales
 
@@ -113,13 +114,13 @@ DESTINATION_AUTO_ID_COLUMN=id
 
 MCAAS rechazará un `SELECT` que devuelva directamente una columna `id`, evitando que accidentalmente intente escribir la PK del destino.
 
-## Extracción actual: empresa CONTPAQi -> `nucleo_empresa`
+## Extracción actual: empresa CONTPAQi -> `erp_nucleo_empresa`
 
-El proyecto incluye `scripts/extraction-empresa-contpaqi.sql`, preparado para una inyección directa desde `dbo.NOM10000` hacia la estructura actual de `nucleo_empresa`.
+El proyecto incluye `scripts/extraction-empresa-contpaqi.sql`, preparado para una inyección directa desde `dbo.NOM10000` hacia la estructura actual de `erp_nucleo_empresa`.
 
 El mapeo utilizado es:
 
-| CONTPAQi | `nucleo_empresa` | Tratamiento |
+| CONTPAQi | `erp_nucleo_empresa` | Tratamiento |
 | --- | --- | --- |
 | `GUIDEmpresa` | `id` | Se normaliza quitando llaves `{}` si existen; debe quedar en 36 caracteres. Es la clave de sincronización. |
 | `CodigoERP` | `codigo` | Texto no vacío, máximo 50 caracteres. |
@@ -151,12 +152,12 @@ DESTINATION_AUTO_ID_COLUMN=
 
 EXTRACT_1_NAME=Empresa_CONTPAQi
 EXTRACT_1_SCRIPT=./scripts/extraction-empresa-contpaqi.sql
-EXTRACT_1_TARGET_TABLE=nucleo_empresa
+EXTRACT_1_TARGET_TABLE=erp_nucleo_empresa
 EXTRACT_1_SYNC_KEY_COLUMNS=id
 
 DESTINATION_COUNT=1
 DEST_1_DB_TYPE=mysql
-DEST_1_TARGET_TABLE=nucleo_empresa
+DEST_1_TARGET_TABLE=erp_nucleo_empresa
 ```
 
 `INCLUDE_SOURCE_NAME=false` fuerza este flujo directo a **no agregar `source_name`**, aunque `ORIGIN_FIELD_NAME=source_name` permanezca configurado. Para reactivar la identificación por origen en otro escenario, cambie `INCLUDE_SOURCE_NAME=true`.

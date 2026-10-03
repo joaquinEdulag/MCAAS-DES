@@ -1,4 +1,4 @@
-# Estado de validación - MCAAS - DES v1.1.0 (extracción directa CONTPAQi -> nucleo_empresa)
+# Estado de validación - MCAAS - DES v1.1.0 (extracción directa CONTPAQi -> erp_nucleo_empresa)
 
 Este archivo documenta los cambios y el alcance de la validación de esta entrega.
 
@@ -16,7 +16,7 @@ Este archivo documenta los cambios y el alcance de la validación de esta entreg
 ## Ajustes añadidos en esta entrega
 
 - `package.json` declara `pnpm@11.24.0` como package manager y los scripts internos de build dejaron de depender de comandos `npm`/`npx`.
-- `scripts/extraction-empresa-contpaqi.sql` se ajustó a la estructura completa actual de `nucleo_empresa`.
+- `scripts/extraction-empresa-contpaqi.sql` se ajustó a la estructura completa actual de `erp_nucleo_empresa`.
 - `GUIDEmpresa` se envía como `id` y se usa como clave de sincronización.
 - Se sincronizan `codigo`, `nombre`, `nombre_corto`, `nombre_fiscal`, `rfc`, representante legal, registros IMSS/Infonavit/Fonacot, régimen fiscal, dirección, localidad, código postal, teléfono, estado y `actualizado_en`.
 - El RFC se reconstruye con `RFC + FechaConstitucion(YYMMDD) + Homoclave`; no se usa `RFCCompletoERP`.
@@ -24,6 +24,10 @@ Este archivo documenta los cambios y el alcance de la validación de esta entreg
 - `INCLUDE_SOURCE_NAME=false` deshabilita de forma explícita la inyección de `source_name` para esta sincronización directa.
 - El estado de sincronización utiliza la tabla destino efectiva, incluyendo un override por `DEST_N_TARGET_TABLE`.
 - Se añadieron pruebas para el mapeo directo del SQL, la omisión de `source_name` y la separación del estado por tabla destino.
+- Los scripts funcionales ahora apuntan a `erp_nucleo_empresa` y `erp_rh_empleado`.
+- Se agrego un mapa de compatibilidad para los 22 renames del ERP (`erp_*`, `casl_*`, `entra_*`).
+- Un `DEST_N_TARGET_TABLE` legacy conocido se normaliza automaticamente al nombre actual antes de escribir.
+- El estado local puede migrarse del stream calculado con el nombre anterior al stream del nombre actual, evitando una resincronizacion completa causada solo por el rename.
 
 ## Validaciones ejecutadas en esta sesión
 
