@@ -1,9 +1,11 @@
 const LEGACY_TABLE_RENAMES: Readonly<Record<string, string>> = Object.freeze({
-  nucleo_empresa: 'erp_nucleo_empresa',
+  nucleo_empresa: 'erp_organizacion_empresa',
+  erp_nucleo_empresa: 'erp_organizacion_empresa',
   organizacion_area: 'erp_organizacion_area',
   organizacion_area_jefe: 'erp_organizacion_area_jefe',
   organizacion_puesto: 'erp_organizacion_puesto',
-  rh_empleado: 'erp_rh_empleado',
+  rh_empleado: 'erp_organizacion_empleado',
+  erp_rh_empleado: 'erp_organizacion_empleado',
   rh_empleado_asignacion: 'erp_rh_empleado_asignacion',
   rh_empleado_asignacion_historico: 'erp_rh_empleado_asignacion_historico',
   rh_horario: 'erp_rh_horario',

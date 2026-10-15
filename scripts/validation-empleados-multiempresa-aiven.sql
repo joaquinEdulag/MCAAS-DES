@@ -1,81 +1,63 @@
 -- ============================================================
--- VALIDACION AIVEN - EMPLEADOS MULTIEMPRESA
--- Ejecutar en MySQL/Aiven (edulag_erp_dev) despues de sincronizar.
--- No modifica datos: solo SELECT.
+-- VALIDACION SOLO LECTURA - ERP / CONTPAQi - 2026-10-15
+-- Esquema contrastado con edulag_erp_dev (octubre 2026).
+-- NO ejecuta INSERT, UPDATE, DELETE ni cambia la estructura.
 -- ============================================================
 
--- 1) Resumen por origen y empresa.
+-- 1) Cantidad de empleados por empresa y nombre registrado.
 SELECT
-    e.source_name,
     e.empresa_id,
     n.nombre AS empresa,
     COUNT(*) AS total_empleados
-FROM erp_rh_empleado AS e
-LEFT JOIN erp_nucleo_empresa AS n
-    ON n.id = e.empresa_id
-WHERE e.source_name IN (
-    'EDULAG',
-    'TEQUILERA_CASA_ALAMOS',
-    'PENTAGONO_AGRICOLA'
-)
-GROUP BY
-    e.source_name,
-    e.empresa_id,
-    n.nombre
-ORDER BY e.source_name;
+FROM erp_organizacion_empleado AS e
+LEFT JOIN erp_organizacion_empresa AS n ON n.id = e.empresa_id
+GROUP BY e.empresa_id, n.nombre
+ORDER BY n.nombre, e.empresa_id;
 
--- 2) Verificar que cada origen usa el GUID esperado.
+-- 2) Empresas que aparecen en empleados y no son las tres esperadas.
+-- Si hay otras empresas legitimas en el ERP, revisarlas, no borrarlas.
 SELECT
-    source_name,
     empresa_id,
-    COUNT(*) AS total_empleados,
-    CASE
-        WHEN source_name = 'EDULAG'
-             AND empresa_id = 'C51D9348-5DA4-445C-AB90-66890241BA5E' THEN 'OK'
-        WHEN source_name = 'TEQUILERA_CASA_ALAMOS'
-             AND empresa_id = 'D1EEE7F0-ED97-4339-ABF3-BAC4BC260F18' THEN 'OK'
-        WHEN source_name = 'PENTAGONO_AGRICOLA'
-             AND empresa_id = 'E0DA7FED-2B95-41F1-B81D-54260A680800' THEN 'OK'
-        ELSE 'REVISAR'
-    END AS validacion_guid
-FROM erp_rh_empleado
-WHERE source_name IN (
-    'EDULAG',
-    'TEQUILERA_CASA_ALAMOS',
-    'PENTAGONO_AGRICOLA'
-)
-GROUP BY source_name, empresa_id
-ORDER BY source_name, empresa_id;
+    COUNT(*) AS total_empleados
+FROM erp_organizacion_empleado
+WHERE empresa_id IS NOT NULL
+  AND empresa_id NOT IN (
+      'C51D9348-5DA4-445C-AB90-66890241BA5E',
+      'D1EEE7F0-ED97-4339-ABF3-BAC4BC260F18',
+      'E0DA7FED-2B95-41F1-B81D-54260A680800'
+  )
+GROUP BY empresa_id;
 
--- 3) Empleados sin empresa relacionada.
+-- 3) Empleados sin empresa asociada. Deberia devolver 0 filas.
 SELECT
-    source_name,
+    e.empresa_id,
     COUNT(*) AS empleados_sin_empresa
-FROM erp_rh_empleado
-WHERE source_name IN (
-    'EDULAG',
-    'TEQUILERA_CASA_ALAMOS',
-    'PENTAGONO_AGRICOLA'
-)
-  AND empresa_id IS NULL
-GROUP BY source_name;
+FROM erp_organizacion_empleado AS e
+LEFT JOIN erp_organizacion_empresa AS n ON n.id = e.empresa_id
+WHERE e.empresa_id IS NULL OR n.id IS NULL
+GROUP BY e.empresa_id;
 
--- 4) Numeros de empleado repetidos entre empresas.
--- Esto NO es necesariamente un error de MCAAS: source_name + numero_empleado
--- sigue siendo la clave de sincronizacion. Sirve para detectar si el ERP
--- necesitara considerar empresa_id durante la vinculacion inicial de identidad.
+-- 4) CLAVE: empleados duplicados dentro de la MISMA empresa.
+-- Si devuelve filas, detener la sincronizacion y revisarlas.
+-- MCAAS usa (empresa_id, numero_empleado) para localizar una fila.
 SELECT
-    TRIM(numero_empleado) AS numero_empleado,
-    COUNT(*) AS cantidad,
-    GROUP_CONCAT(DISTINCT source_name ORDER BY source_name SEPARATOR ' | ') AS origenes
-FROM erp_rh_empleado
-WHERE source_name IN (
-    'EDULAG',
-    'TEQUILERA_CASA_ALAMOS',
-    'PENTAGONO_AGRICOLA'
-)
+    empresa_id,
+    numero_empleado,
+    COUNT(*) AS repeticiones
+FROM erp_organizacion_empleado
+WHERE empresa_id IS NOT NULL
   AND numero_empleado IS NOT NULL
-  AND TRIM(numero_empleado) <> ''
-GROUP BY TRIM(numero_empleado)
+GROUP BY empresa_id, numero_empleado
 HAVING COUNT(*) > 1
-ORDER BY cantidad DESC, numero_empleado;
+ORDER BY repeticiones DESC, empresa_id, numero_empleado;
+
+-- 5) Numeros repetidos ENTRE empresas (no son necesariamente un problema).
+SELECT
+    numero_empleado,
+    COUNT(DISTINCT empresa_id) AS empresas_distintas
+FROM erp_organizacion_empleado
+WHERE empresa_id IS NOT NULL
+  AND numero_empleado IS NOT NULL
+GROUP BY numero_empleado
+HAVING COUNT(DISTINCT empresa_id) > 1
+ORDER BY empresas_distintas DESC, numero_empleado;

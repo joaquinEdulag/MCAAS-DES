@@ -6,7 +6,7 @@ import { SyncStateStore } from '../src/state-store.js';
 
 describe('SyncStateStore', () => {
   it('cambia el stream cuando cambia la tabla destino efectiva', () => {
-    const a = SyncStateStore.streamId('Empresa_CONTPAQi', 'erp_nucleo_empresa', ['id']);
+    const a = SyncStateStore.streamId('Empresa_CONTPAQi', 'erp_organizacion_empresa', ['id']);
     const b = SyncStateStore.streamId('Empresa_CONTPAQi', 'otra_tabla', ['id']);
     expect(a).not.toBe(b);
   });
@@ -14,14 +14,14 @@ describe('SyncStateStore', () => {
   it('migra el estado local del nombre legacy al nombre actual sin resincronizar filas iguales', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcaas-state-rename-'));
     const store = new SyncStateStore(dir);
-    const legacyStream = SyncStateStore.streamId('Empleado_EDULAG', 'rh_empleado', ['source_name', 'numero_empleado']);
-    const currentStream = SyncStateStore.streamId('Empleado_EDULAG', 'erp_rh_empleado', ['source_name', 'numero_empleado']);
-    const rows = [{ source_name: 'EDULAG', numero_empleado: '315', nombre_completo: 'Persona' }];
-    const first = store.classify(legacyStream, 'dest-1', rows, ['source_name', 'numero_empleado']);
+    const legacyStream = SyncStateStore.streamId('Empresa_CONTPAQi', 'erp_nucleo_empresa', ['id']);
+    const currentStream = SyncStateStore.streamId('Empresa_CONTPAQi', 'erp_organizacion_empresa', ['id']);
+    const rows = [{ id: 'GUID-EMPRESA', nombre: 'Empresa' }];
+    const first = store.classify(legacyStream, 'dest-1', rows, ['id']);
     store.commit(legacyStream, 'dest-1', first);
 
     expect(store.migrateStream(legacyStream, currentStream)).toBe(true);
-    expect(store.classify(currentStream, 'dest-1', rows, ['source_name', 'numero_empleado'])).toHaveLength(0);
+    expect(store.classify(currentStream, 'dest-1', rows, ['id'])).toHaveLength(0);
     expect(store.migrateStream(legacyStream, currentStream)).toBe(false);
   });
 

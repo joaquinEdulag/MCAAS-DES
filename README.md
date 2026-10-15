@@ -5,7 +5,7 @@
 MCAAS - DES es un servicio de sincronización de datos orientado a Windows. Desde la versión **1.1.0** puede ejecutar múltiples trabajos de extracción: cada trabajo puede consultar una tabla distinta, usar un script SQL distinto e incluso conectarse a una base de datos origen diferente. Todos los cambios detectados se distribuyen a todos los destinos configurados.
 
 Para actualizar una instalación v1.0.x, consulte también `MIGRATION_v1.1.md`.
-Para la nomenclatura fisica actual del ERP (`erp_*`, `casl_*`, `entra_*`), consulte `MIGRATION_ERP_TABLE_NAMES.md`. MCAAS normaliza temporalmente nombres legacy conocidos y migra el estado local del stream para evitar una resincronizacion causada unicamente por el rename de tablas.
+Para las tablas vigentes del ERP consulte `MIGRATION_ERP_SCHEMA_2026-10-15.md`. El documento `MIGRATION_ERP_TABLE_NAMES.md` conserva los cambios historicos de nomenclatura. MCAAS normaliza temporalmente nombres legacy conocidos y migra el estado local del stream para evitar una resincronizacion causada unicamente por el rename de tablas.
 
 ## Capacidades principales
 
@@ -114,21 +114,21 @@ DESTINATION_AUTO_ID_COLUMN=id
 
 MCAAS rechazará un `SELECT` que devuelva directamente una columna `id`, evitando que accidentalmente intente escribir la PK del destino.
 
-## Extracción actual: empresa CONTPAQi -> `erp_nucleo_empresa`
+## Extracción actual: empresa CONTPAQi -> `erp_organizacion_empresa`
 
-El proyecto incluye `scripts/extraction-empresa-contpaqi.sql`, preparado para una inyección directa desde `dbo.NOM10000` hacia la estructura actual de `erp_nucleo_empresa`.
+El proyecto incluye `scripts/extraction-empresa-contpaqi.sql`, preparado para una inyección directa desde `dbo.NOM10000` hacia la estructura actual de `erp_organizacion_empresa`.
 
 El mapeo utilizado es:
 
-| CONTPAQi | `erp_nucleo_empresa` | Tratamiento |
+| CONTPAQi | `erp_organizacion_empresa` | Tratamiento |
 | --- | --- | --- |
 | `GUIDEmpresa` | `id` | Se normaliza quitando llaves `{}` si existen; debe quedar en 36 caracteres. Es la clave de sincronización. |
-| `CodigoERP` | `codigo` | Texto no vacío, máximo 50 caracteres. |
+| `IDEmpresa` | `codigo` | Texto no vacío, máximo 50 caracteres. |
 | `NombreEmpresa` | `nombre` | Texto no vacío, máximo 200 caracteres. |
 | `NombreCorto` | `nombre_corto` | Máximo 100 caracteres. |
 | `NombreEmpresaFiscal` | `nombre_fiscal` | Máximo 200 caracteres. |
 | `RFC` + `FechaConstitucion` + `Homoclave` | `rfc` | Se reconstruye como `RFC + YYMMDD + Homoclave`; no se depende de `RFCCompletoERP`. |
-| `RepresentanteLegalERP` | `representante_legal` | Si está vacío, se arma con `NombreRepresentante + ApPaternoRepresentante + ApMaternoRepresentante`. |
+| `NombreRepresentante`, `ApPaternoRepresentante`, `ApMaternoRepresentante` | `representante_legal` | Se arma con `NombreRepresentante + ApPaternoRepresentante + ApMaternoRepresentante`. |
 | `RegistroIMSS` | `registro_patronal_imss` | Máximo 50 caracteres. |
 | `RegistroInfonavit` | `registro_infonavit` | Máximo 50 caracteres. |
 | `RegistroFonacot` | `registro_fonacot` | Máximo 50 caracteres. |
@@ -136,9 +136,9 @@ El mapeo utilizado es:
 | `Direccion` | `direccion` | Máximo 500 caracteres. |
 | `Localidad` | `localidad` | Máximo 150 caracteres. |
 | `CodigoPostal` | `codigo_postal` | Se conserva como texto y se rellena a 5 dígitos cuando es numérico. |
-| `TelefonoPrincipalERP` / `Telefono1` / `Telefono2` / `Telefono3` | `telefono` | Usa el primero no vacío y distinto de `0`. |
-| `EstadoERP` | `estado` | `INACTIVO` se conserva; cualquier otro valor se normaliza a `ACTIVO`. |
-| `TimeStamp` | `actualizado_en` | Se convierte a `datetime2(3)` en SQL Server y se envía al `datetime(3)` de MySQL. |
+| `Telefono1` / `Telefono2` / `Telefono3` | `telefono` | Usa el primero no vacío y distinto de `0`. |
+| `Sin equivalente en NOM10000` | `estado` | El script utiliza `ACTIVO` para los registros extraídos. |
+| `TimeStamp` / `FechaInicioHistoria` | `actualizado_en` | Toma la fecha de origen disponible, con valor alternativo cuando ambas faltan. |
 
 `creado_en` no se envía porque la tabla destino ya define `CURRENT_TIMESTAMP(3)`.
 
@@ -152,17 +152,19 @@ DESTINATION_AUTO_ID_COLUMN=
 
 EXTRACT_1_NAME=Empresa_CONTPAQi
 EXTRACT_1_SCRIPT=./scripts/extraction-empresa-contpaqi.sql
-EXTRACT_1_TARGET_TABLE=erp_nucleo_empresa
+EXTRACT_1_TARGET_TABLE=erp_organizacion_empresa
 EXTRACT_1_SYNC_KEY_COLUMNS=id
 
 DESTINATION_COUNT=1
 DEST_1_DB_TYPE=mysql
-DEST_1_TARGET_TABLE=erp_nucleo_empresa
+DEST_1_TARGET_TABLE=erp_organizacion_empresa
 ```
 
 `INCLUDE_SOURCE_NAME=false` fuerza este flujo directo a **no agregar `source_name`**, aunque `ORIGIN_FIELD_NAME=source_name` permanezca configurado. Para reactivar la identificación por origen en otro escenario, cambie `INCLUDE_SOURCE_NAME=true`.
 
 El flujo normal es **UPDATE por `id` (`GUIDEmpresa`) y, si no existe, INSERT**. `codigo` y `rfc` siguen respetando las restricciones `UNIQUE` del destino.
+
+**Importante en el ERP de octubre de 2026:** `erp_organizacion_empleado` no tiene la columna `source_name`. Los scripts incluidos para EDULAG, Tequilera y Pentágono usan `empresa_id,numero_empleado` como clave y no envían `source_name`. Mantenga `INCLUDE_SOURCE_NAME=false` y deje `DEST_N_TARGET_TABLE` vacío cuando diferentes extracciones escriban en tablas diferentes.
 
 ## Configuración de múltiples extracciones
 

@@ -7,14 +7,14 @@ describe('extraccion directa de empresa CONTPAQi', () => {
   const scriptPath = path.resolve(process.cwd(), 'scripts', 'extraction-empresa-contpaqi.sql');
   const script = parseExtractionScript(scriptPath);
 
-  it('apunta a erp_nucleo_empresa y usa GUIDEmpresa/id como clave funcional', () => {
-    expect(script.targetTable).toBe('erp_nucleo_empresa');
+  it('apunta a erp_organizacion_empresa y usa GUIDEmpresa/id como clave funcional', () => {
+    expect(script.targetTable).toBe('erp_organizacion_empresa');
     expect(script.keyColumns).toEqual(['id']);
     expect(script.sql).toMatch(/GUIDEmpresa/i);
     expect(script.sql).toMatch(/\bAS\s+id\b/i);
   });
 
-  it('mapea los campos reales de NOM10000 a erp_nucleo_empresa', () => {
+  it('mapea los campos reales de NOM10000 a erp_organizacion_empresa', () => {
     const expectedSourceFields = [
       'IDEmpresa',
       'GUIDEmpresa',
@@ -119,8 +119,8 @@ describe('extraccion de empleados EDULAG', () => {
   const script = parseExtractionScript(scriptPath);
 
   it('conserva las fechas DATE como AAAA-MM-DD sin sumar dias', () => {
-    expect(script.targetTable).toBe('erp_rh_empleado');
-    expect(script.keyColumns).toEqual(['source_name', 'numero_empleado']);
+    expect(script.targetTable).toBe('erp_organizacion_empleado');
+    expect(script.keyColumns).toEqual(['empresa_id', 'numero_empleado']);
     expect(script.sql).toMatch(/CONVERT\(\s*char\(10\)\s*,\s*fecha_nacimiento_origen\s*,\s*23\s*\)\s*(?:END\s+)?AS\s+fecha_nacimiento/i);
     expect(script.sql).toMatch(/CONVERT\(\s*char\(10\)\s*,\s*fecha_alta\s*,\s*23\s*\)\s*(?:END\s+)?AS\s+fecha_alta/i);
     expect(script.sql).toMatch(/CONVERT\(\s*char\(10\)\s*,\s*fecha_baja_contpaqi\s*,\s*23\s*\)\s*(?:END\s+)?AS\s+fecha_baja_contpaqi/i);
@@ -150,8 +150,8 @@ describe('extracciones de empleados multiempresa CONTPAQi', () => {
       const scriptPath = path.resolve(process.cwd(), 'scripts', item.file);
       const script = parseExtractionScript(scriptPath);
 
-      expect(script.targetTable).toBe('erp_rh_empleado');
-      expect(script.keyColumns).toEqual(['source_name', 'numero_empleado']);
+      expect(script.targetTable).toBe('erp_organizacion_empleado');
+      expect(script.keyColumns).toEqual(['empresa_id', 'numero_empleado']);
       expect(script.sql).toContain(item.database);
       expect(script.sql).toContain(item.sourceName);
       expect(script.sql).toContain(item.guid);

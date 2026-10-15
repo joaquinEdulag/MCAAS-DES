@@ -1,6 +1,6 @@
 -- MCAAS_NAME=Empleado_EDULAG
--- MCAAS_TARGET_TABLE=erp_rh_empleado
--- MCAAS_KEY_COLUMNS=source_name,numero_empleado
+-- MCAAS_TARGET_TABLE=erp_organizacion_empleado
+-- MCAAS_KEY_COLUMNS=empresa_id,numero_empleado
 
 -- ============================================================
 -- MCAAS-DES
@@ -18,14 +18,14 @@
 -- DESTINO:
 --   MySQL / Aiven
 --   BD: edulag_erp_dev
---   Tabla: erp_rh_empleado
+--   Tabla: erp_organizacion_empleado
 --
 -- IDENTIDAD MCAAS:
---   source_name + numero_empleado
+--   empresa_id + numero_empleado
 --
 -- ID AIVEN:
 --   No se envia.
---   erp_rh_empleado.id es AUTO_INCREMENT.
+--   erp_organizacion_empleado.id es AUTO_INCREMENT.
 --
 -- EMPRESA:
 --   Los empleados de esta extracción pertenecen exclusivamente
@@ -34,7 +34,7 @@
 --   empresa_id:
 --   C51D9348-5DA4-445C-AB90-66890241BA5E
 --
---   Este valor corresponde a erp_nucleo_empresa.id.
+--   Este valor corresponde a erp_organizacion_empresa.id.
 --
 -- IMPORTANTE:
 --   No se consulta NOM10000 desde esta extracción.
@@ -46,12 +46,12 @@
 --   nom10001.iddepartamento
 --       -> nom10003.iddepartamento
 --       -> nom10003.descripcion
---       -> erp_rh_empleado.area_contpaqi
+--       -> erp_organizacion_empleado.area_contpaqi
 --
 --   nom10001.idpuesto
 --       -> nom10006.idpuesto
 --       -> nom10006.descripcion
---       -> erp_rh_empleado.puesto_contpaqi
+--       -> erp_organizacion_empleado.puesto_contpaqi
 --
 -- NO SE MODIFICAN:
 --   area_id
@@ -79,16 +79,10 @@
 
 
         -- ====================================================
-        -- ORIGEN LOGICO
-        -- ====================================================
-        CAST('EDULAG' AS varchar(150)) AS source_name,
-
-
-        -- ====================================================
         -- EMPRESA
         --
         -- GUID definitivo de Edulag.
-        -- Coincide con erp_nucleo_empresa.id.
+        -- Coincide con erp_organizacion_empresa.id.
         --
         -- Se coloca directamente porque esta extracción
         -- pertenece exclusivamente a EDULAG.
@@ -389,7 +383,7 @@
 --
 -- Identidad funcional:
 --
---   source_name + numero_empleado
+--   empresa_id + numero_empleado
 --
 -- Ejemplo:
 --
@@ -409,7 +403,7 @@ clasificada AS (
         ROW_NUMBER() OVER (
 
             PARTITION BY
-                source_name,
+                empresa_id,
                 numero_empleado
 
             ORDER BY
@@ -438,8 +432,6 @@ clasificada AS (
 origen AS (
 
     SELECT
-
-        source_name,
 
         empresa_id,
 
@@ -495,12 +487,6 @@ origen AS (
 mapeada AS (
 
     SELECT
-
-        -- ====================================================
-        -- PROCEDENCIA
-        -- ====================================================
-        source_name,
-
 
         -- ====================================================
         -- EMPRESA
@@ -719,18 +705,16 @@ mapeada AS (
 --   transporte
 --   vales
 --
--- erp_rh_empleado.id:
+-- erp_organizacion_empleado.id:
 --   generado por AUTO_INCREMENT.
 --
 -- Identidad MCAAS:
 --
---   source_name + numero_empleado
+--   empresa_id + numero_empleado
 --
 -- Esto permite actualizar las filas ya existentes.
 -- ============================================================
 SELECT
-
-    source_name,
 
     empresa_id,
 
@@ -772,9 +756,7 @@ SELECT
 
 FROM mapeada
 
-WHERE source_name IS NOT NULL
-
-  AND empresa_id IS NOT NULL
+WHERE empresa_id IS NOT NULL
 
   AND LEN(empresa_id) = 36
 

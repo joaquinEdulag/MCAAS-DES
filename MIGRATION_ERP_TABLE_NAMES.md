@@ -1,3 +1,8 @@
+> **Actualizacion 2026-10-15:** este documento explica la migracion historica del 03/10.
+> Las tablas actuales son `erp_organizacion_empresa` y `erp_organizacion_empleado`,
+> y `source_name` ya no existe en la tabla de empleados.
+> Consulte `MIGRATION_ERP_SCHEMA_2026-10-15.md` para la actualizacion vigente.
+
 # Migracion de nombres fisicos del ERP - 2026-10-03
 
 El ERP cambio su convencion de tablas fisicas. MCAAS-DES queda alineado con esa nomenclatura y conserva compatibilidad temporal con configuraciones que todavia tengan nombres anteriores.
